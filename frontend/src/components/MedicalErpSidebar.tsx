@@ -128,7 +128,7 @@ export const MedicalErpSidebar: React.FC<MedicalErpSidebarProps> = ({
           const Icon = item.icon;
           const isActive = 
             activeTab === item.id || 
-            (item.id === 'prescriptions' && activeTab === 'doctor_dashboard') ||
+            (item.id === 'prescriptions' && (role === 'doctor' ? activeTab === 'doctor_dashboard' : activeTab === 'prescriptions')) ||
             (item.id === 'medical_records' && activeTab === 'patient_hub') ||
             (item.id === 'analytics' && activeTab === 'smartflow');
 
@@ -136,7 +136,13 @@ export const MedicalErpSidebar: React.FC<MedicalErpSidebarProps> = ({
             <button
               key={item.id}
               onClick={() => {
-                if (item.id === 'prescriptions') onTabChange('doctor_dashboard');
+                if (item.id === 'prescriptions') {
+                  if (role === 'patient') {
+                    onTabChange('prescriptions');
+                  } else {
+                    onTabChange('doctor_dashboard');
+                  }
+                }
                 else if (item.id === 'medical_records') onTabChange('patient_hub');
                 else if (item.id === 'analytics') onTabChange('smartflow');
                 else if (item.id === 'safety_center') onTabChange('chat');

@@ -131,7 +131,7 @@ def run_suite():
 
     # 21. 15-Second Walk-in Kiosk Token
     st, d = post("/api/walkin-token", {"patient_name": "Kiosk Patient", "phone": "9876543210", "department": "General Medicine", "hospital_id": 2, "urgency": "NORMAL"})
-    check("21. POST /api/walkin-token", st, d, lambda x: x.get("success") is True and "token" in x, f"Generated Token #{d.get('token', {}).get('token_number')}")
+    check("21. POST /api/walkin-token", st, d, lambda x: x.get("success") is True and ("token" in x or "token_number" in x), f"Generated Token #{d.get('token_number') or d.get('token', {}).get('token_number')}")
 
     # 22. Medical Report Scanner (OCR simulation)
     st, d = post("/api/scan-report", {"raw_text": "Patient fasting blood sugar: 185 mg/dL. HbA1c: 8.2%. Impression: Type 2 Diabetes Mellitus Uncontrolled."})

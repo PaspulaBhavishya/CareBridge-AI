@@ -149,6 +149,7 @@ export interface ActionRequired {
   conflict_id?: number;
   doctor_name?: string;
   hospital_name?: string;
+  department?: string;
   room_number?: string;
   consultation_fee?: number;
   token_number?: number | string;
@@ -400,6 +401,7 @@ export interface PrescriptionData {
   medicines: PrescriptionMedicine[];
   doctor_notes?: string;
   issued_at?: string;
+  follow_up_date?: string;
 }
 
 export interface ReportScanItem {

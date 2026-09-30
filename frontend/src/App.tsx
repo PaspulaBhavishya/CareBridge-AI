@@ -35,7 +35,7 @@ import { PrivacyConsentDashboard } from './components/PrivacyConsentDashboard';
 import { AgentSessionReplay } from './components/AgentSessionReplay';
 import { SafetyContractPanel } from './components/SafetyContractPanel';
 import { TechnicalArchitectureModal } from './components/TechnicalArchitectureModal';
-import { Ticket } from 'lucide-react';
+import { Ticket, Pill, Stethoscope, CheckCircle2 } from 'lucide-react';
 import type { 
   UserRole, UserProfile, ChatMessage, HospitalStatus, 
   AppointmentRecord, ScheduleConflictRecord, AuditLogEntry, DigitalPassData,
@@ -931,6 +931,186 @@ export function App() {
           <div className="flex-1 bg-[#F8FAFC] text-slate-800 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 pb-24">
             <div className="max-w-5xl mx-auto">
               <WalkinTokenKiosk seniorMode={seniorMode} />
+            </div>
+          </div>
+        )}
+
+        {/* Patient Prescriptions Portal Tab */}
+        {activeTab === 'prescriptions' && (
+          <div className="flex-1 bg-[#F8FAFC] text-slate-800 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 pb-24">
+            {/* Header Banner */}
+            <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Verified Digital Prescriptions • నా మందుల చీటీలు
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    • Patient: <strong className="text-slate-800">{currentProfile.name || 'Bhavishya'}</strong> (ID: {currentProfile.patient_uid || 'PAT-1000'})
+                  </span>
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                  <Pill className="h-7 w-7 text-emerald-600" />
+                  <span>My Active Prescriptions & Medications</span>
+                </h1>
+                <p className="text-sm text-slate-500 mt-1">
+                  View medically verified digital prescriptions, clear Telugu & English dosage schedules, and doctor advice.
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  const passData: DigitalPassData = {
+                    confirmation_code: "CB-2026-GM024",
+                    patient_name: currentProfile.name || "Bhavishya",
+                    patient_uid: "PAT-1000",
+                    doctor_name: "Dr. Priya",
+                    specialization: "General Medicine",
+                    department: "General Medicine",
+                    hospital_name: "Hospital B (CareBridge Central)",
+                    room_number: "Room OPD-03",
+                    date: "Today",
+                    time: "10:30 AM",
+                    token_number: "GM-024",
+                    current_serving_token: "GM-022",
+                    patients_ahead: 2,
+                    simulated_wait_min: 10,
+                    consultation_fee: 600,
+                    instructions: "Please report 10 minutes prior to Room OPD-03 Desk.",
+                    prescription: {
+                      diagnosis: "Acute Dyspepsia & Mild Gastritis (గ్యాస్ట్రిక్ సమస్య)",
+                      doctor_notes: "Take antacid on empty stomach in the morning. Avoid heavy oily meals.",
+                      follow_up_date: "Next Monday",
+                      medicines: [
+                        { name: "Tab Pantoprazole 40mg", dosage: "1-0-0", timing: "Before Breakfast (ఉదయం పరగడుపున)", duration: "14 Days", notes: "Acid reflux control" },
+                        { name: "Syp Sucralfate 10ml", dosage: "1-0-1", timing: "After Meals (భోజనం తర్వాత)", duration: "7 Days", notes: "Mucosal protective" },
+                        { name: "Tab Metformin 500mg", dosage: "1-0-1", timing: "After Food (భోజనం తర్వాత)", duration: "30 Days", notes: "Blood glucose regulation" }
+                      ]
+                    }
+                  };
+                  setSelectedPass(passData);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Ticket className="h-4 w-4" />
+                <span>View Digital OPD Pass (ఈ-పాస్)</span>
+              </button>
+            </div>
+
+            {/* Prescriptions List Card */}
+            <div className="max-w-4xl mx-auto space-y-5">
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-11 w-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                      <Stethoscope className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-bold text-slate-900">Dr. Priya, MD</h3>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                          Consultant Physician • General Medicine
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        CareBridge Metro Health Center • Room OPD-03 • Issued: Today
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                    Doctor Verified (వైద్యుని సంతకం)
+                  </span>
+                </div>
+
+                {/* Diagnosis Summary */}
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1 text-xs">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                    Clinical Diagnosis (వ్యాధి నిర్ధారణ)
+                  </span>
+                  <p className="text-sm font-bold text-slate-900">
+                    Acute Dyspepsia & Mild Gastritis (గ్యాస్ట్రిక్ సమస్య & కడుపులో మంట)
+                  </p>
+                  <p className="text-xs text-slate-600">
+                    Advice: Low sodium diet, brisk walking 30 mins daily, avoid spicy/oily foods, stay hydrated.
+                  </p>
+                </div>
+
+                {/* Medicines List */}
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Prescribed Medications ({3})
+                  </h4>
+
+                  <div className="grid gap-3">
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 transition space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 text-sm">Tab Pantoprazole 40mg</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold border border-emerald-200">
+                            1-0-0 (Morning)
+                          </span>
+                        </div>
+                        <span className="text-xs font-mono text-slate-500 font-semibold">14 Days</span>
+                      </div>
+                      <div className="text-xs text-slate-600 flex flex-wrap items-center gap-3">
+                        <span className="text-emerald-700 font-medium">⏰ Before Breakfast (ఉదయం పరగడుపున)</span>
+                        <span>•</span>
+                        <span className="text-slate-500">Antacid for gastric relief</span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 transition space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 text-sm">Syp Sucralfate 10ml</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-bold border border-blue-200">
+                            1-0-1 (Twice Daily)
+                          </span>
+                        </div>
+                        <span className="text-xs font-mono text-slate-500 font-semibold">7 Days</span>
+                      </div>
+                      <div className="text-xs text-slate-600 flex flex-wrap items-center gap-3">
+                        <span className="text-blue-700 font-medium">⏰ 1 hour after meals (భోజనం తర్వాత 1 గంటకు)</span>
+                        <span>•</span>
+                        <span className="text-slate-500">Mucosal coating and ulcer protection</span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 transition space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 text-sm">Tab Metformin 500mg</span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-amber-50 text-amber-700 font-bold border border-amber-200">
+                            1-0-1 (Morning & Night)
+                          </span>
+                        </div>
+                        <span className="text-xs font-mono text-slate-500 font-semibold">30 Days</span>
+                      </div>
+                      <div className="text-xs text-slate-600 flex flex-wrap items-center gap-3">
+                        <span className="text-amber-700 font-medium">⏰ After food (భోజనం తర్వాత)</span>
+                        <span>•</span>
+                        <span className="text-slate-500">Blood sugar balance</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Follow-up Note */}
+                <div className="p-4 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-between gap-3 text-xs">
+                  <div>
+                    <span className="font-bold text-purple-900 block text-xs">Next Follow-Up Due:</span>
+                    <p className="text-purple-700 mt-0.5">Please consult Dr. Priya after 14 days or if symptoms persist.</p>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('chat')}
+                    className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs shadow-xs transition cursor-pointer shrink-0"
+                  >
+                    Schedule Follow-Up
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

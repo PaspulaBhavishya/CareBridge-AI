@@ -34,9 +34,18 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
   const [selectedRxPatient, setSelectedRxPatient] = useState<{ id: number; name: string; token: number } | null>(null);
   const [alertToast, setAlertToast] = useState<string | null>(null);
 
+  const isDoctor = currentProfile.role === 'doctor';
+  const doctorDisplayName = isDoctor ? currentProfile.name : 'Dr. Priya';
+  const doctorSpecialty = isDoctor 
+    ? (currentProfile.specialization || 'Attending Physician') 
+    : 'Consultant Physician • General Medicine';
+  const doctorHospital = isDoctor 
+    ? (currentProfile.preferred_hospital || 'Hospital B (Metro Multi-Specialty)') 
+    : 'Hospital B (Metro Multi-Specialty)';
+
   // Filter appointments for this doctor if matching, else show demo queue
   const docAppointments = appointments.filter(
-    (a) => a.doctor_name && a.doctor_name.toLowerCase().includes(currentProfile.name.split(' ').pop()?.toLowerCase() || '')
+    (a) => a.doctor_name && a.doctor_name.toLowerCase().includes(doctorDisplayName.split(' ').pop()?.toLowerCase() || '')
   );
 
   const displayQueue = docAppointments.length > 0 ? docAppointments : appointments.slice(0, 5);
@@ -106,10 +115,10 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2.5">
             <Stethoscope className="h-7 w-7 text-blue-600" />
-            <span>{currentProfile.name}</span>
+            <span>{doctorDisplayName}</span>
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            {currentProfile.specialization || 'Clinical Specialist'} • {currentProfile.preferred_hospital || 'Hospital B (Metro Multi-Specialty)'}
+            {doctorSpecialty} • {doctorHospital}
           </p>
         </div>
 

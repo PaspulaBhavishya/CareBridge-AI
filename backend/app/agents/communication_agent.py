@@ -100,9 +100,9 @@ class CommunicationAgent:
         elif any(w in m_lower for w in [
             "naaku diabetes unda", "sugar unda", "cancer unda", "bp unda",
             "do i have diabetes", "do i have cancer", "do i have high bp", "do i have hypertension",
-            "what illness do i have", "what disease do i have", "diagnose me", "diagnose my",
+            "what illness do i have", "what disease do i have", "diagnose me", "diagnose my", "diagnose", "diagnosis",
             "am i sick", "rogo unda", "naaku em rogam", "em samasya undi", "can you diagnose",
-            "diagnose my symptoms", "రోగాన్ని నిర్ధారించండి"
+            "diagnose my symptoms", "రోగాన్ని నిర్ధారించండి", "డయాగ్నోసిస్", "రోగ నిర్ధారణ"
         ]):
             intent = "MEDICAL_DIAGNOSIS_REFUSAL"
 

@@ -3,7 +3,7 @@ import {
   Calendar, Clock, Ticket, Stethoscope, MapPin, 
   CheckCircle2, Bell, RefreshCw, XCircle, FileText, ChevronRight,
   Navigation, Info, Activity, Shield, Zap, Sparkles, Users, Search,
-  Phone, Eye
+  Phone, Eye, Pill
 } from 'lucide-react';
 import type { UserProfile, AppointmentRecord, DigitalPassData } from '../types';
 
@@ -747,6 +747,17 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                   </div>
                   <p className="text-[11px] text-slate-500">After food (భోజనం తర్వాత) • 30 days</p>
                 </div>
+
+                <button
+                  onClick={() => {
+                    if (onNavigateToTab) onNavigateToTab('prescriptions');
+                    else if (onOpenMyPrescriptions) onOpenMyPrescriptions();
+                  }}
+                  className="w-full mt-2 py-2 rounded-xl bg-cyan-50 hover:bg-cyan-100 text-cyan-800 text-xs font-bold border border-cyan-200 transition cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Pill className="w-3.5 h-3.5 text-cyan-600" />
+                  <span>View All Prescriptions & Timings →</span>
+                </button>
               </div>
 
               {/* Card 3: Follow-Up Date & Care */}
