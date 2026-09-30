@@ -161,6 +161,20 @@ def init_db(db: Session):
             daily_patient_limit=18,
             current_active_patients=8
         ),
+        Doctor(
+            hospital_id=hosp_a.id,
+            department_id=dept_neuro.id,
+            name="Dr. N. Sudhakar",
+            title="Consultant Neurologist",
+            specialization="Stroke Care & Clinical Neurology",
+            experience_years=12,
+            consultation_fee=700,
+            room_number="Room 402 (4th Floor)",
+            rating=4.8,
+            languages_spoken="English, Telugu",
+            daily_patient_limit=18,
+            current_active_patients=5
+        ),
 
         # Hospital B Doctors (Optimal wait times & SmartFlow winners!)
         Doctor(
@@ -261,6 +275,34 @@ def init_db(db: Session):
             daily_patient_limit=20,
             current_active_patients=6
         ),
+        Doctor(
+            hospital_id=hosp_b.id,
+            department_id=dept_ortho.id,
+            name="Dr. K. Srinivas",
+            title="Senior Orthopedic & Trauma Surgeon",
+            specialization="Acute Trauma, Complex Fractures & Joint Reconstruction",
+            experience_years=16,
+            consultation_fee=650,
+            room_number="Trauma Bay 01 (Ground Floor)",
+            rating=4.95,
+            languages_spoken="English, Telugu",
+            daily_patient_limit=22,
+            current_active_patients=4
+        ),
+        Doctor(
+            hospital_id=hosp_b.id,
+            department_id=dept_neuro.id,
+            name="Dr. Sunitha Reddy",
+            title="Consultant Neurologist",
+            specialization="Acute Stroke Care, Neuro ICU & Epilepsy",
+            experience_years=14,
+            consultation_fee=700,
+            room_number="Room 302 (3rd Floor)",
+            rating=4.9,
+            languages_spoken="English, Telugu, Hindi",
+            daily_patient_limit=20,
+            current_active_patients=3
+        ),
 
         # Hospital C Doctors (City Community - busier, longer wait)
         Doctor(
@@ -304,6 +346,20 @@ def init_db(db: Session):
             languages_spoken="English, Telugu",
             daily_patient_limit=14,
             current_active_patients=9
+        ),
+        Doctor(
+            hospital_id=hosp_c.id,
+            department_id=dept_ortho.id,
+            name="Dr. M. Ramesh",
+            title="Consultant Orthopedic Surgeon",
+            specialization="Trauma Care & General Orthopedics",
+            experience_years=10,
+            consultation_fee=500,
+            room_number="Room 008 (Ground Floor)",
+            rating=4.6,
+            languages_spoken="English, Telugu",
+            daily_patient_limit=20,
+            current_active_patients=10
         ),
     ]
     db.add_all(docs)

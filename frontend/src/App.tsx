@@ -1607,6 +1607,10 @@ export function App() {
         isOpen={isEmergencySOSOpen}
         onClose={() => setIsEmergencySOSOpen(false)}
         seniorMode={seniorMode}
+        onBookAppointment={(_dept) => {
+          setIsEmergencySOSOpen(false);
+          setActiveTab('chat');
+        }}
       />
 
       {/* Notification Center Modal */}

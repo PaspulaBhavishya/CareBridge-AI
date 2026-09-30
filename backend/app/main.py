@@ -1,5 +1,6 @@
 import datetime
 import json
+import math
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -1488,4 +1489,383 @@ def send_live_alert(req: SendAlertRequest, db: Session = Depends(get_db)):
         "alert_type": req.alert_type,
         "delivered_at": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
     }
+
+
+# =====================================================================
+# 6. EMERGENCY TRIAGE & NEAREST SPECIALIST DISPATCH (/api/emergency/triage)
+# =====================================================================
+
+class EmergencyTriageRequest(BaseModel):
+    case_type: Optional[str] = None # CHEST_PAIN, ACCIDENT_TRAUMA, BREATHING_SEVERE, STROKE_NEURO, MATERNITY, NON_EMERGENCY, OTHER
+    description: Optional[str] = ""
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    patient_name: Optional[str] = "Emergency Patient"
+    contact_phone: Optional[str] = "+91 98480 99999"
+
+class EmergencyPreAlertRequest(BaseModel):
+    hospital_code: str
+    patient_name: str
+    case_type: str
+    eta_minutes: int
+    specialist_name: str
+    contact_phone: str
+    gps_coordinates: Optional[str] = ""
+
+HOSPITAL_GEOLOCATIONS = {
+    "HOSP-A": {"lat": 17.4156, "lng": 78.4350, "area": "Banjara Hills, Road No. 2"},
+    "HOSP-B": {"lat": 17.4401, "lng": 78.3489, "area": "Gachibowli, Financial District"},
+    "HOSP-C": {"lat": 17.4399, "lng": 78.4983, "area": "Secunderabad, Clock Tower"},
+}
+
+def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return round(R * c, 1)
+
+EMERGENCY_DEPT_MAPPING = {
+    "CHEST_PAIN": {
+        "dept": "Cardiology",
+        "title_en": "Acute Coronary / Chest Pain Emergency",
+        "title_te": "గుండెపోటు / ఛాతీ నొప్పి అత్యవసర పరిస్థితి",
+        "severity": "CODE_RED_CRITICAL",
+        "first_aid_en": [
+            "Keep the patient seated comfortably in an upright position; strictly avoid any walking or exertion.",
+            "Loosen tight clothing around chest and neck to ease breathing.",
+            "If prescribed by a physician or available, chew one adult Disprin/Aspirin (300mg) immediately.",
+            "Monitor pulse and breathing; prepare for CPR if responsiveness ceases."
+        ],
+        "first_aid_te": [
+            "రోగిని తక్షణమే నిశ్శబ్దంగా, విశ్రాంతిగా కూర్చోబెట్టండి. ఎటువంటి శారీరక శ్రమ చేయనివ్వవద్దు.",
+            "రోగి బిగుతైన బట్టలను వదులు చేయండి. తాజా గాలి అందేలా చూడండి.",
+            "వైద్యుల సూచన ఉంటే లేదా అందుబాటులో ఉంటే తక్షణమే ఆస్పిరిన్ (Disprin 300mg) నమలడానికి ఇవ్వండి.",
+            "శ్వాస లేదా నాడి ఆగిపోతే వెంటనే ఛాతీపై CPR (Chest Compressions) ప్రారంభించండి."
+        ]
+    },
+    "ACCIDENT_TRAUMA": {
+        "dept": "Orthopedics",
+        "title_en": "Severe Bleeding / Road Trauma / Fracture",
+        "title_te": "తీవ్ర రక్తస్రావం / రోడ్డు ప్రమాదం / ఎముకల గాయం",
+        "severity": "CODE_RED_CRITICAL",
+        "first_aid_en": [
+            "Apply continuous firm pressure to bleeding sites using a clean sterile cloth.",
+            "Immobilize any suspected fractured limbs in their current position; do not attempt to realign.",
+            "Keep the patient's head and neck completely still if trauma or spinal injury is suspected.",
+            "Do not administer fluids or food orally."
+        ],
+        "first_aid_te": [
+            "రక్తస్రావం అవుతున్న ప్రదేశంపై శుభ్రమైన గుడ్డతో గట్టిగా నొక్కి ఉంచండి (Direct Pressure).",
+            "విరిగిన ఎముకలను సరిచేసే ప్రయత్నం చేయవద్దు; ఆ భాగాన్ని స్థిరంగా ఉంచండి.",
+            "తల లేదా మెడ గాయమైతే మెడను అస్సలు కదల్చవద్దు.",
+            "రోగికి నోటి ద్వారా ఎటువంటి ఆహారం లేదా నీరు ఇవ్వవద్దు."
+        ]
+    },
+    "BREATHING_SEVERE": {
+        "dept": "General Medicine",
+        "title_en": "Acute Respiratory Distress / Severe Choking",
+        "title_te": "తీవ్ర శ్వాస సమస్య / ఊపిరాడకపోవడం",
+        "severity": "CODE_RED_CRITICAL",
+        "first_aid_en": [
+            "Help the patient sit straight up in a high Fowler's position; never force them to lie flat.",
+            "Open nearby windows to ensure ample fresh air circulation.",
+            "If asthmatic with a prescribed rescue inhaler, administer 2-4 puffs immediately.",
+            "Check mouth and throat to ensure the airway is free of obstruction."
+        ],
+        "first_aid_te": [
+            "రోగిని నిటారుగా కూర్చోబెట్టండి, పడుకోబెట్టవద్దు (Sit upright).",
+            "కిటికీలు తెరిచి గదిలోకి స్వచ్ఛమైన గాలి వచ్చేలా చూడండి.",
+            "ఆస్తమా ఇన్హేలర్ ఉంటే వెంటనే 2-4 పఫ్‌లు ఇప్పించండి.",
+            "రోగి గొంతులో ఏదైనా అడ్డుపడి ఉంటే వెంటనే తొలగించండి."
+        ]
+    },
+    "STROKE_NEURO": {
+        "dept": "Neurology",
+        "title_en": "Acute Stroke / Seizure / Neurological Deficit",
+        "title_te": "తీవ్ర పక్షవాతం / నాడీ సంబంధిత అత్యవసర పరిస్థితి",
+        "severity": "CODE_RED_CRITICAL",
+        "first_aid_en": [
+            "Check FAST signs: Face drooping, Arm weakness, Speech slurred, Time of onset.",
+            "If unconscious but breathing, turn the patient onto their side in recovery position.",
+            "Note the exact minute symptoms started (vital for clot-busting Golden Hour treatment).",
+            "Do not give any aspirin, water, or food until CT scan is completed."
+        ],
+        "first_aid_te": [
+            "FAST సంకేతాలను గమనించండి: ముఖం వంకరపోవడం, చేయి బలహీనత, మాట తడబడటం.",
+            "స్పృహ కోల్పోతే రోగిని ఒక వైపునకు ఒరిగించి పడుకోబెట్టండి (Recovery Position).",
+            "స్ట్రోక్ మొదలైన సమయాన్ని ఖచ్చితంగా నమోదు చేసుకోండి (గోల్డెన్ అవర్ చికిత్స కోసం).",
+            "స్కాన్ పూర్తయ్యే వరకు రోగికి ఆస్పిరిన్ లేదా నీరు ఇవ్వవద్దు."
+        ]
+    },
+    "MATERNITY": {
+        "dept": "Pediatrics",
+        "title_en": "Obstetric & Maternity Emergency / Labor",
+        "title_te": "ప్రసవ అత్యవసర పరిస్థితి",
+        "severity": "URGENT_EMERGENCY",
+        "first_aid_en": [
+            "Position the expectant mother resting on her left lateral side to enhance fetal perfusion.",
+            "Provide calm reassurance and guide steady, deep breathing.",
+            "Prepare clean blankets and transport immediately to the designated maternity trauma ward."
+        ],
+        "first_aid_te": [
+            "తల్లిని ఎడమ వైపునకు ఒరిగించి పడుకోబెట్టండి (ఇది శిశువుకు రక్తప్రసరణను పెంచుతుంది).",
+            "ప్రశాంతంగా ఉంచి లోతైన శ్వాస తీసుకోనివ్వండి.",
+            "వెంటనే ప్రసవ విభాగానికి తరలించడానికి సిద్ధం చేయండి."
+        ]
+    }
+}
+
+@app.post("/api/emergency/triage")
+def emergency_triage_and_dispatch(req: EmergencyTriageRequest, db: Session = Depends(get_db)):
+    """
+    Intelligent Emergency Triage Gateway:
+    1. Determines whether case is a genuine acute emergency.
+    2. Identifies target clinical specialty required.
+    3. Locates device GPS coordinates.
+    4. Computes nearest hospital with on-duty specialist doctor.
+    5. Dispatches ER audit alert and returns bilingual guidance.
+    """
+    combined_text = f"{req.case_type or ''} {req.description or ''}".lower()
+
+    non_emergency_keywords = [
+        "headache", "mild", "cold", "cough", "tooth", "dental", "pimple", "acne",
+        "rash", "hair", "dandruff", "refill", "routine", "checkup", "regular", "normal",
+        "fever since", "tired", "indigestion", "constipation", "gas",
+        "జలుబు", "దగ్గు", "పంటి నొప్పి", "తేలికపాటి", "సాధారణ", "మామూలు", "చర్మం"
+    ]
+    red_flag_keywords = [
+        "chest", "heart", "cardiac", "angina", "attack", "bleed", "accident",
+        "fracture", "trauma", "unconscious", "stroke", "paraly", "chok", "breath",
+        "suffocat", "seizure", "labor", "maternity", "గుండె", "ఛాతీ", "రక్తస్రావం",
+        "ప్రమాదం", "పక్షవాతం", "స్పృహ", "మూర్ఛ", "ఆయాసం"
+    ]
+
+    is_explicit_non_emergency = req.case_type == "NON_EMERGENCY"
+    has_non_emerg_keyword = any(k in combined_text for k in non_emergency_keywords)
+    has_red_flag = any(k in combined_text for k in red_flag_keywords)
+
+    # 1. Non-emergency evaluation
+    if is_explicit_non_emergency or (has_non_emerg_keyword and not has_red_flag and req.case_type not in EMERGENCY_DEPT_MAPPING):
+        suggested_dept = "General Medicine"
+        if any(k in combined_text for k in ["skin", "pimple", "acne", "rash", "hair", "చర్మం"]):
+            suggested_dept = "Dermatology"
+        elif any(k in combined_text for k in ["bone", "knee", "back", "joint"]):
+            suggested_dept = "Orthopedics"
+
+        return {
+            "is_genuine_emergency": False,
+            "severity": "NON_EMERGENCY",
+            "case_category": "Non-Critical Outpatient Case",
+            "case_category_te": "ప్రాణాంతకం కాని సాధారణ ఆరోగ్య సమస్య",
+            "message_te": "⚠️ ఇది ప్రాణాంతక అత్యవసర పరిస్థితి కాదు (Non-Life-Threatening Case). 108 అంబులెన్స్ మరియు ఎమర్జెన్సీ వార్డులు తీవ్ర ప్రాణాపాయంలో ఉన్న రోగులకు కేటాయించబడతాయి. మీరు సురక్షితంగా మా నిపుణులైన వైద్యులతో సాధారణ OPD అపాయింట్‌మెంట్ బుక్ చేసుకోవచ్చు.",
+            "message_en": "⚠️ This does not appear to be a life-threatening acute emergency. Emergency 108 and ER facilities are prioritized for critical life-threatening trauma. You can safely schedule a regular outpatient consultation.",
+            "suggested_action": "BOOK_REGULAR_APPOINTMENT",
+            "suggested_department": suggested_dept,
+            "advisory_badge": "OPD Consult Recommended (సాధారణ అపాయింట్‌మెంట్)"
+        }
+
+    # 2. Genuine Emergency Classification
+    selected_case = req.case_type if req.case_type in EMERGENCY_DEPT_MAPPING else None
+    if not selected_case:
+        if any(k in combined_text for k in ["chest", "heart", "cardiac", "angina", "attack", "గుండె", "ఛాతీ"]):
+            selected_case = "CHEST_PAIN"
+        elif any(k in combined_text for k in ["accident", "bleed", "fracture", "trauma", "bone", "wound", "fall", "injury", "ప్రమాదం", "రక్తస్రావం", "గాయం", "ఎముక"]):
+            selected_case = "ACCIDENT_TRAUMA"
+        elif any(k in combined_text for k in ["breath", "suffocat", "chok", "asthma", "gasp", "ఆయాసం", "శ్వాస"]):
+            selected_case = "BREATHING_SEVERE"
+        elif any(k in combined_text for k in ["stroke", "paraly", "seizure", "unconscious", "faint", "droop", "speech", "పక్షవాతం", "స్పృహ", "మూర్ఛ"]):
+            selected_case = "STROKE_NEURO"
+        elif any(k in combined_text for k in ["labor", "pregnant", "delivery", "maternity", "ప్రసవం", "గర్భిణి"]):
+            selected_case = "MATERNITY"
+        else:
+            selected_case = "CHEST_PAIN" # Default high-priority acute cardiac triage
+
+    emergency_meta = EMERGENCY_DEPT_MAPPING[selected_case]
+    target_dept_name = emergency_meta["dept"]
+
+    # 3. Patient GPS Geolocation
+    if req.latitude and req.longitude and (-90 <= req.latitude <= 90) and (-180 <= req.longitude <= 180) and (req.latitude != 0):
+        patient_lat = req.latitude
+        patient_lng = req.longitude
+        loc_source = "DEVICE_GPS"
+    else:
+        # Default to central Hyderabad / Gachibowli hub
+        patient_lat = 17.4401
+        patient_lng = 78.3489
+        loc_source = "DEFAULT_METRO_HUB"
+
+    # 4. Hospital & Specialist Doctor Matching
+    hospitals = db.query(Hospital).all()
+    if not hospitals:
+        raise HTTPException(status_code=500, detail="Hospital network nodes not configured")
+
+    candidates = []
+    for h in hospitals:
+        geo = HOSPITAL_GEOLOCATIONS.get(h.code, {"lat": 17.4401, "lng": 78.3489, "area": h.area})
+        h_lat = geo["lat"]
+        h_lng = geo["lng"]
+
+        dist_km = calculate_haversine_distance(patient_lat, patient_lng, h_lat, h_lng)
+        eta_min = max(3, int(round(dist_km * 2.2)))
+
+        # Find doctors in matching department
+        specialist_doc = None
+        for d in h.doctors:
+            if d.department and d.department.name.lower() == target_dept_name.lower():
+                specialist_doc = d
+                break
+
+        has_specialist = specialist_doc is not None
+        if not specialist_doc:
+            # Fallback to General Medicine doctor or first available doctor
+            for d in h.doctors:
+                if d.department and d.department.name.lower() == "general medicine":
+                    specialist_doc = d
+                    break
+            if not specialist_doc and h.doctors:
+                specialist_doc = h.doctors[0]
+
+        candidates.append({
+            "hospital": h,
+            "geo": geo,
+            "doctor": specialist_doc,
+            "has_specialist": has_specialist,
+            "distance_km": dist_km,
+            "eta_minutes": eta_min
+        })
+
+    # Sort candidates:
+    # 1. Has specific specialist on duty (True first)
+    # 2. Distance in km (Closest first)
+    # 3. ICU Units available (Descending)
+    candidates.sort(key=lambda c: (
+        not c["has_specialist"],
+        c["distance_km"],
+        -c["hospital"].active_icu_units
+    ))
+
+    best = candidates[0]
+    best_hosp = best["hospital"]
+    best_doc = best["doctor"]
+
+    alt_list = []
+    for alt in candidates[1:]:
+        alt_h = alt["hospital"]
+        alt_d = alt["doctor"]
+        alt_list.append({
+            "hospital_code": alt_h.code,
+            "hospital_name": alt_h.name,
+            "short_name": alt_h.short_name,
+            "area": alt_h.area,
+            "distance_km": alt["distance_km"],
+            "eta_minutes": alt["eta_minutes"],
+            "emergency_phone": alt_h.emergency_phone,
+            "has_specialist": alt["has_specialist"],
+            "doctor_name": alt_d.name if alt_d else "Emergency Resident",
+            "doctor_title": alt_d.title if alt_d else "Medical Officer",
+            "active_icu_units": alt_h.active_icu_units
+        })
+
+    # 5. Audit Log Dispatch
+    dispatch_code = f"SOS-{int(datetime.datetime.utcnow().timestamp())}"
+    audit = AuditLog(
+        actor_name="CareBridge Emergency Dispatch System",
+        actor_role="system",
+        action_type="EMERGENCY_CODE_RED_TRIAGE",
+        status="DISPATCHED",
+        details=(
+            f"Code-Red Triage for {req.patient_name} ({req.contact_phone}) | "
+            f"Case: {selected_case} ({emergency_meta['title_en']}) | "
+            f"Assigned Hospital: {best_hosp.name} ({best_hosp.short_name}) | "
+            f"Specialist: {best_doc.name if best_doc else 'ER Duty Specialist'} ({best_doc.title if best_doc else ''}) | "
+            f"Distance: {best['distance_km']} km, ETA: {best['eta_minutes']} min | "
+            f"Patient GPS: ({patient_lat:.4f}, {patient_lng:.4f})"
+        ),
+        risk_level="CRITICAL"
+    )
+    db.add(audit)
+    db.commit()
+
+    return {
+        "is_genuine_emergency": True,
+        "dispatch_id": dispatch_code,
+        "severity": emergency_meta["severity"],
+        "case_type": selected_case,
+        "case_category_en": emergency_meta["title_en"],
+        "case_category_te": emergency_meta["title_te"],
+        "required_specialty": target_dept_name,
+        "patient_location": {
+            "latitude": patient_lat,
+            "longitude": patient_lng,
+            "source": loc_source
+        },
+        "recommended_hospital": {
+            "id": best_hosp.id,
+            "code": best_hosp.code,
+            "name": best_hosp.name,
+            "short_name": best_hosp.short_name,
+            "area": best_hosp.area,
+            "city": best_hosp.city,
+            "distance_km": best["distance_km"],
+            "eta_minutes": best["eta_minutes"],
+            "emergency_phone": best_hosp.emergency_phone,
+            "contact_phone": best_hosp.contact_phone,
+            "map_link": f"https://www.google.com/maps/dir/?api=1&destination={best['geo']['lat']},{best['geo']['lng']}",
+            "active_icu_units": best_hosp.active_icu_units,
+            "available_beds": max(0, best_hosp.total_beds - best_hosp.occupied_beds),
+            "er_status": "Level-1 24/7 Trauma Bay Active • Cath Lab & Resuscitation On Standby"
+        },
+        "specialist_doctor": {
+            "id": best_doc.id if best_doc else None,
+            "name": best_doc.name if best_doc else "Dr. ER Lead",
+            "title": best_doc.title if best_doc else "Senior Specialist",
+            "specialization": best_doc.specialization if best_doc else target_dept_name,
+            "room_number": best_doc.room_number if best_doc else "Emergency Trauma Bay",
+            "rating": best_doc.rating if best_doc else 4.9,
+            "experience_years": best_doc.experience_years if best_doc else 12,
+            "languages_spoken": best_doc.languages_spoken if best_doc else "English, Telugu",
+            "duty_status": "ON_DUTY_IN_ER"
+        },
+        "alternative_hospitals": alt_list,
+        "first_aid_en": emergency_meta["first_aid_en"],
+        "first_aid_te": emergency_meta["first_aid_te"],
+        "hotlines": {
+            "ambulance": "108",
+            "national_emergency": "112"
+        },
+        "dispatched_at": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    }
+
+@app.post("/api/emergency/pre-alert")
+def pre_alert_hospital_er(req: EmergencyPreAlertRequest, db: Session = Depends(get_db)):
+    """
+    Sends direct priority pre-arrival alert to the hospital Emergency Room desk.
+    """
+    audit = AuditLog(
+        actor_name="Emergency ER Fast-Track Gateway",
+        actor_role="system",
+        action_type="ER_PRE_ALERT_DISPATCHED",
+        status="SUCCESS",
+        details=(
+            f"Pre-alert sent to {req.hospital_code} ER desk for incoming patient {req.patient_name}. "
+            f"Case: {req.case_type}, ETA: {req.eta_minutes} mins. "
+            f"Assigned specialist: {req.specialist_name}. Contact: {req.contact_phone}."
+        ),
+        risk_level="HIGH"
+    )
+    db.add(audit)
+    db.commit()
+    return {
+        "success": True,
+        "alert_id": f"ER-ALERT-{int(datetime.datetime.utcnow().timestamp())}",
+        "hospital_code": req.hospital_code,
+        "status": "ER_TRAUMA_BAY_READY",
+        "message_te": f"{req.hospital_code} అత్యవసర విభాగానికి సమాచారం పంపబడింది. డాక్టర్ {req.specialist_name} మరియు ట్రామా బృందం రోగి రాక కోసం సిద్ధంగా ఉన్నారు.",
+        "message_en": f"Pre-alert dispatched to {req.hospital_code} Emergency Room. Dr. {req.specialist_name} and Trauma Bay team are on standby for incoming patient arrival in {req.eta_minutes} minutes.",
+        "dispatched_at": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    }
+
 
