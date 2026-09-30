@@ -35,7 +35,7 @@ import { PrivacyConsentDashboard } from './components/PrivacyConsentDashboard';
 import { AgentSessionReplay } from './components/AgentSessionReplay';
 import { SafetyContractPanel } from './components/SafetyContractPanel';
 import { TechnicalArchitectureModal } from './components/TechnicalArchitectureModal';
-import { Ticket, Pill, Stethoscope, CheckCircle2 } from 'lucide-react';
+import { Ticket, Pill, Stethoscope, CheckCircle2, MessageSquare, Inbox, Trash2, RefreshCw } from 'lucide-react';
 import type { 
   UserRole, UserProfile, ChatMessage, HospitalStatus, 
   AppointmentRecord, ScheduleConflictRecord, AuditLogEntry, DigitalPassData,
@@ -1228,6 +1228,239 @@ export function App() {
                     </div>
                   ))
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Patient Messages & Hospital Communications Tab */}
+        {activeTab === 'messages' && (
+          <div className="flex-1 bg-[#F8FAFC] text-slate-800 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 pb-24">
+            {/* Top Banner */}
+            <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1.5">
+                    <MessageSquare className="h-3.5 w-3.5 text-blue-600" />
+                    Communications & Alerts • సందేశాలు
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    • {notifications.filter((n) => !n.is_read).length} unread
+                  </span>
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                  <Inbox className="h-7 w-7 text-blue-600" />
+                  <span>Hospital Messages & Notifications</span>
+                </h1>
+                <p className="text-sm text-slate-500 mt-1">
+                  Doctor advice, prescription notices, OPD queue updates, and SMS/WhatsApp communications.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleTriggerTestAlert}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition cursor-pointer flex items-center gap-1.5"
+                  title="Simulate SMS/WhatsApp Notification"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 text-slate-600" />
+                  <span>Test New Alert</span>
+                </button>
+                <button
+                  onClick={handleClearAllNotifications}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-semibold text-xs transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Clear All</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Messages Inbox Container */}
+            <div className="max-w-4xl mx-auto space-y-4">
+              {/* Message 1: Attending Doctor Clinical Note */}
+              <div className="p-5 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50/50 via-white to-white shadow-xs space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                      <Stethoscope className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-slate-900 text-sm">Dr. Priya (MD, General Medicine)</h4>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                          Attending Doctor
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                          Active Prescription
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">CareBridge Metro Health Center • Room OPD-03</p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-400">Today, 10:45 AM</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 text-xs text-slate-700 leading-relaxed space-y-2">
+                  <p className="font-semibold text-slate-900">
+                    Subject: Follow-up & Medication Instructions for Stomach Discomfort (గ్యాస్ట్రిక్ సమస్య)
+                  </p>
+                  <p>
+                    "Hello {currentProfile.name || 'Bhavishya'}, I have reviewed your consultation symptoms. Your digital prescription for mild dyspepsia and gastritis is now active. Please take Tab Pantoprazole 40mg once daily in the morning on an empty stomach (ఉదయం పరగడుపున), and Sucralfate after meals."
+                  </p>
+                  <p className="text-slate-600">
+                    "Please maintain light meals, avoid spicy foods, and drink at least 2.5 litres of water. If you have any discomfort or questions, you can ask through our CareBridge AI anytime."
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setActiveTab('prescriptions')}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    >
+                      <Pill className="h-3.5 w-3.5" />
+                      <span>View My Prescriptions</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActiveTab('chat');
+                        handleSendMessage("Doctor, I have a question about my gastritis prescription dosage.");
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      <span>Reply to Doctor</span>
+                    </button>
+                  </div>
+                  <span className="text-[11px] text-slate-400">Digital Sign-off: Verified by Dr. Priya</span>
+                </div>
+              </div>
+
+              {/* Message 2: Live OPD Token Alert */}
+              <div className="p-5 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50/40 via-white to-white shadow-xs space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
+                      <Ticket className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-slate-900 text-sm">OPD Token Tracking Desk</h4>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                          Live Queue Alert
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">CareBridge Metro Hospital OPD Reception</p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-400">10 mins ago</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 text-xs text-slate-700 leading-relaxed space-y-1">
+                  <p className="font-semibold text-slate-900">
+                    Token GM-024 Approaching • మీ టోకెన్ దగ్గరకు వచ్చింది
+                  </p>
+                  <p>
+                    Your OPD Token <strong>GM-024</strong> has only 2 patients ahead in the queue at Room OPD-03 with Dr. Priya. Estimated wait time is approximately 10 minutes.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      setTrackedTokenNumber("GM-024");
+                      setActiveTab('token_tracker');
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <Ticket className="h-3.5 w-3.5" />
+                    <span>Track Live Token (GM-024)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Message 3: Lab & Diagnostics Report Ready */}
+              <div className="p-5 rounded-2xl border border-teal-200 bg-gradient-to-br from-teal-50/40 via-white to-white shadow-xs space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center font-bold">
+                      <CheckCircle2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-slate-900 text-sm">CareBridge Central Diagnostic Laboratory</h4>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-800">
+                          Lab Report Verified
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">Bio-Chemistry & Hematology Section</p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-400">Today, 08:30 AM</span>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 text-xs text-slate-700 leading-relaxed space-y-1">
+                  <p className="font-semibold text-slate-900">
+                    Fasting Blood Glucose & HbA1c Panel Results (మధుమేహం / షుగర్ రక్త పరీక్ష)
+                  </p>
+                  <p>
+                    Your sample analysis is complete: Fasting Blood Sugar: <strong>110 mg/dL</strong> (Normal), HbA1c: <strong>5.8%</strong> (Optimal glycemic control).
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={() => setActiveTab('scanner')}
+                    className="px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <span>Open Medical Report Scanner</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Dynamic Notification Items from Backend */}
+              {notifications.map((notif) => (
+                <div
+                  key={notif.id}
+                  className={`p-5 rounded-2xl border transition space-y-3 shadow-xs ${
+                    notif.is_read
+                      ? 'bg-white border-slate-200/90'
+                      : 'bg-blue-50/30 border-blue-300 ring-1 ring-blue-300/40'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
+                        <MessageSquare className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-sm">{notif.title}</h4>
+                        <p className="text-xs text-slate-400">CareBridge Hospital System Alert</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!notif.is_read && (
+                        <button
+                          onClick={() => handleMarkNotificationRead(notif.id)}
+                          className="px-2.5 py-1 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-800 text-[11px] font-semibold transition cursor-pointer"
+                        >
+                          Mark Read
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteNotification(notif.id)}
+                        className="text-slate-400 hover:text-rose-600 p-1 rounded-lg transition cursor-pointer"
+                        title="Delete notification"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    {notif.message}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         )}

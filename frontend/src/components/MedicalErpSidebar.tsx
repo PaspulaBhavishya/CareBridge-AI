@@ -146,7 +146,7 @@ export const MedicalErpSidebar: React.FC<MedicalErpSidebarProps> = ({
                 else if (item.id === 'medical_records') onTabChange('patient_hub');
                 else if (item.id === 'analytics') onTabChange('smartflow');
                 else if (item.id === 'safety_center') onTabChange('chat');
-                else if (item.id === 'messages') onTabChange('chat');
+                else if (item.id === 'messages') onTabChange('messages');
                 else if (item.id === 'settings') onTabChange('patient_hub');
                 else onTabChange(item.id);
               }}
