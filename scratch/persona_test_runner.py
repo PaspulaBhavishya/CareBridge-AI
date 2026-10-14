@@ -35,7 +35,7 @@ def post(path, data):
 
 def test_doctor_persona():
     print("\n" + "="*80)
-    print("👨‍⚕️ ROLE 1: DOCTOR PERSONA TEST — DR. PRIYA / DR. ANIL KUMAR")
+    print("👨‍⚕️ ROLE 1: DOCTOR PERSONA TEST — DR. PRIYA / DR. DR. NAVEEN KUMAR")
     print("="*80)
 
     # 1. Doctor Login

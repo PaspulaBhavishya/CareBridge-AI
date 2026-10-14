@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Calendar, Clock, Ticket, Stethoscope, MapPin, 
   CheckCircle2, Bell, RefreshCw, XCircle, FileText, ChevronRight,
   Navigation, Info, Activity, Shield, Zap, Sparkles, Users, Search,
-  Phone, Eye, Pill
+  Phone, Eye, Pill, Download
 } from 'lucide-react';
 import type { UserProfile, AppointmentRecord, DigitalPassData } from '../types';
+import { ExportPatientVisitsModal } from './ExportPatientVisitsModal';
 
 interface PatientDashboardProps {
   currentProfile: UserProfile;
@@ -24,6 +25,7 @@ interface PatientDashboardProps {
   onViewJourney?: () => void;
   onNavigateToTab?: (tab: string) => void;
   seniorMode?: boolean;
+  initialSubTab?: 'hub' | 'directory';
 }
 
 interface HospitalPatientRecord {
@@ -44,6 +46,73 @@ interface HospitalPatientRecord {
 }
 
 const SAMPLE_PATIENTS_ROSTER: HospitalPatientRecord[] = [
+  // Patients consulting Dr. Naveen Kumar (Cardiology)
+  {
+    id: "PAT-1001",
+    name: "S. Murthy",
+    nameTelugu: "ఎస్. మూర్తి",
+    age: 64,
+    gender: "Male",
+    phone: "+91 94401 22345",
+    condition: "Cardiac Arrhythmia & Hypertension",
+    doctor: "Dr. Naveen Kumar",
+    dept: "Cardiology",
+    room: "Room CARD-01",
+    token: "C-24",
+    status: "In Consultation",
+    lastVisit: "Today",
+    risk: "High Risk"
+  },
+  {
+    id: "PAT-1005",
+    name: "K. Rajesh Varma",
+    nameTelugu: "కె. రాజేష్ వర్మ",
+    age: 58,
+    gender: "Male",
+    phone: "+91 98480 77123",
+    condition: "Coronary Artery Disease & Stable Angina",
+    doctor: "Dr. Naveen Kumar",
+    dept: "Cardiology",
+    room: "Room CARD-01",
+    token: "C-25",
+    status: "Waiting",
+    lastVisit: "Today",
+    risk: "Moderate"
+  },
+  {
+    id: "PAT-1006",
+    name: "V. Subba Rao",
+    nameTelugu: "వి. సుబ్బారావు",
+    age: 61,
+    gender: "Male",
+    phone: "+91 97012 34567",
+    condition: "Post-Angioplasty Stent Follow-up (LVEF 52%)",
+    doctor: "Dr. Naveen Kumar",
+    dept: "Cardiology",
+    room: "Room CARD-01",
+    token: "C-26",
+    status: "Waiting",
+    lastVisit: "Today",
+    risk: "Normal"
+  },
+  {
+    id: "PAT-1007",
+    name: "M. Sita Raman",
+    nameTelugu: "ఎం. సీతారామన్",
+    age: 67,
+    gender: "Female",
+    phone: "+91 99891 23456",
+    condition: "Mild Aortic Regurgitation & Dyspnea",
+    doctor: "Dr. Naveen Kumar",
+    dept: "Cardiology",
+    room: "Room CARD-01",
+    token: "C-27",
+    status: "Completed",
+    lastVisit: "Yesterday",
+    risk: "Moderate"
+  },
+
+  // Patients consulting Dr. Priya (General Medicine)
   {
     id: "PAT-1000",
     name: "Bhavishya",
@@ -61,21 +130,55 @@ const SAMPLE_PATIENTS_ROSTER: HospitalPatientRecord[] = [
     risk: "Normal"
   },
   {
-    id: "PAT-1001",
-    name: "S. Murthy",
-    nameTelugu: "ఎస్. మూర్తి",
-    age: 64,
+    id: "PAT-1008",
+    name: "Ravi Kumar",
+    nameTelugu: "రవి కుమార్",
+    age: 34,
     gender: "Male",
-    phone: "+91 94401 22345",
-    condition: "Cardiac Arrhythmia & Hypertension",
-    doctor: "Dr. Anil Kumar",
-    dept: "Cardiology",
-    room: "Room CARD-01",
-    token: "C-24",
+    phone: "+91 98480 11223",
+    condition: "Seasonal Viral Pyrexia & Acute Fatigue",
+    doctor: "Dr. Priya",
+    dept: "General Medicine",
+    room: "Room OPD-03",
+    token: "GM-025",
     status: "In Consultation",
     lastVisit: "Today",
-    risk: "High Risk"
+    risk: "Normal"
   },
+  {
+    id: "PAT-1009",
+    name: "K. Anitha",
+    nameTelugu: "కె. అనిత",
+    age: 45,
+    gender: "Female",
+    phone: "+91 97000 88991",
+    condition: "Type 2 Diabetes Review & Dyspepsia",
+    doctor: "Dr. Priya",
+    dept: "General Medicine",
+    room: "Room OPD-03",
+    token: "GM-026",
+    status: "Waiting",
+    lastVisit: "Today",
+    risk: "Moderate"
+  },
+  {
+    id: "PAT-1010",
+    name: "G. Ramesh",
+    nameTelugu: "జి. రమేష్",
+    age: 50,
+    gender: "Male",
+    phone: "+91 94411 22334",
+    condition: "Acute Bronchitis & Productive Cough",
+    doctor: "Dr. Priya",
+    dept: "General Medicine",
+    room: "Room OPD-03",
+    token: "GM-027",
+    status: "Completed",
+    lastVisit: "Today",
+    risk: "Normal"
+  },
+
+  // Patients consulting Other Doctors (Visible to Admin & Receptionist)
   {
     id: "PAT-1002",
     name: "K. Rao",
@@ -143,39 +246,122 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   onViewJourney,
   onNavigateToTab,
   seniorMode = false,
+  initialSubTab = 'hub',
 }) => {
+  const isDoctor = currentProfile.role === 'doctor';
+  const doctorNameLower = (currentProfile.name || '').toLowerCase();
+  const isNaveen = doctorNameLower.includes('naveen') || doctorNameLower.includes('anil');
+  const isPriya = doctorNameLower.includes('priya');
+
   const [proximityAlertSubscribed, setProximityAlertSubscribed] = useState<Record<number, boolean>>({});
   const [alertBanner, setAlertBanner] = useState<string | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState<'hub' | 'directory'>('hub');
+  const [activeSubTab, setActiveSubTab] = useState<'hub' | 'directory'>(
+    isDoctor ? 'directory' : (initialSubTab || 'hub')
+  );
   const [rosterSearch, setRosterSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [exportModalOpen, setExportModalOpen] = useState<boolean>(false);
 
-  // Default seeded appointment matching prompt requirements
-  const defaultUpcomingAppt: AppointmentRecord = {
-    id: 100,
-    confirmation_code: "CB-2026-GM024",
-    patient_name: currentProfile.name || "Bhavishya",
-    doctor_name: "Dr. Priya",
-    department: "General Medicine",
-    hospital: "Hospital B (CareBridge Central)",
-    date: "Today",
-    time: "10:30 AM",
-    token_number: "GM-024",
-    token_number_str: "GM-024",
-    consultation_fee: 600,
-    status: "CONFIRMED",
-    simulated_wait_min: 10,
-    smartflow_score: 80,
-    reason: "Stomach pain & general health consultation",
-    created_at: new Date().toISOString()
-  };
+  useEffect(() => {
+    if (isDoctor) {
+      setActiveSubTab('directory');
+    } else if (initialSubTab) {
+      setActiveSubTab(initialSubTab);
+    }
+  }, [initialSubTab, isDoctor, currentProfile.name]);
 
-  // Filter patient's appointments
-  const myAppointments = appointments.filter((a) => 
-    !currentProfile.name || a.patient_name?.toLowerCase().includes(currentProfile.name.toLowerCase())
+  // Default seeded appointment matching doctor or patient persona
+  const defaultUpcomingAppt: AppointmentRecord = isDoctor
+    ? (isNaveen ? {
+        id: 101,
+        confirmation_code: "CB-2026-CARD01",
+        patient_name: "S. Murthy",
+        doctor_name: "Dr. Naveen Kumar",
+        department: "Cardiology",
+        hospital: "Hospital B (CareBridge Central)",
+        date: "Today",
+        time: "10:00 AM",
+        token_number: "C-24",
+        token_number_str: "C-24",
+        consultation_fee: 600,
+        status: "CONFIRMED",
+        simulated_wait_min: 5,
+        smartflow_score: 92,
+        reason: "Cardiac Arrhythmia & Hypertension consultation",
+        created_at: new Date().toISOString()
+      } : {
+        id: 100,
+        confirmation_code: "CB-2026-GM024",
+        patient_name: "Bhavishya",
+        doctor_name: "Dr. Priya",
+        department: "General Medicine",
+        hospital: "Hospital B (CareBridge Central)",
+        date: "Today",
+        time: "10:30 AM",
+        token_number: "GM-024",
+        token_number_str: "GM-024",
+        consultation_fee: 500,
+        status: "CONFIRMED",
+        simulated_wait_min: 10,
+        smartflow_score: 80,
+        reason: "Acute Abdominal Pain & Gastritis",
+        created_at: new Date().toISOString()
+      })
+    : {
+        id: 100,
+        confirmation_code: "CB-2026-GM024",
+        patient_name: currentProfile.name || "Bhavishya",
+        doctor_name: "Dr. Priya",
+        department: "General Medicine",
+        hospital: "Hospital B (CareBridge Central)",
+        date: "Today",
+        time: "10:30 AM",
+        token_number: "GM-024",
+        token_number_str: "GM-024",
+        consultation_fee: 600,
+        status: "CONFIRMED",
+        simulated_wait_min: 10,
+        smartflow_score: 80,
+        reason: "Stomach pain & general health consultation",
+        created_at: new Date().toISOString()
+      };
+
+  // Filter appointments according to doctor or patient identity
+  const myAppointments = isDoctor
+    ? appointments.filter((a) => {
+        const aDoc = (a.doctor_name || '').toLowerCase();
+        if (isNaveen) return aDoc.includes('naveen') || aDoc.includes('anil');
+        if (isPriya) return aDoc.includes('priya');
+        const cleanDoc = currentProfile.name.replace(/^dr\.\s*/i, '').trim().toLowerCase();
+        return aDoc.includes(cleanDoc);
+      })
+    : appointments.filter((a) => {
+        if (a.patient_id && currentProfile.id && a.patient_id === currentProfile.id) return true;
+        if (a.patient_name && currentProfile.name) {
+          const pName = currentProfile.name.toLowerCase().trim();
+          const aName = a.patient_name.toLowerCase().trim();
+          return aName.includes(pName) || pName.includes(aName);
+        }
+        return false;
+      });
+
+  const isPreSeededPatient = 
+    !currentProfile.is_new &&
+    (currentProfile.id === 1 || currentProfile.id === 2 ||
+     (currentProfile.name && (
+       currentProfile.name.toLowerCase().includes('bhavishya') ||
+       currentProfile.name.toLowerCase().includes('sunitha')
+     )));
+
+  const isNewPortal = !isDoctor && (
+    currentProfile.is_new === true ||
+    currentProfile.badge === 'New Patient Portal' ||
+    currentProfile.id === 9 ||
+    (currentProfile.name && currentProfile.name.toLowerCase().includes('mythri')) ||
+    (myAppointments.length === 0 && !isPreSeededPatient)
   );
 
-  const nextAppt = myAppointments.length > 0 ? myAppointments[0] : defaultUpcomingAppt;
+  const nextAppt = myAppointments.length > 0 ? myAppointments[0] : (isNewPortal ? null : defaultUpcomingAppt);
 
   // Audio chime synthesizer via Web Audio API
   const playChime = () => {
@@ -222,22 +408,96 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
       token_number: tok,
       confirmation_code: appt.confirmation_code || "CB-2026-GM024",
       patient_name: appt.patient_name || currentProfile.name || "Bhavishya",
-      doctor_name: appt.doctor_name || "Dr. Priya",
-      specialization: appt.department || "General Medicine",
-      department: appt.department || "General Medicine",
+      doctor_name: appt.doctor_name || (isNaveen ? "Dr. Naveen Kumar" : "Dr. Priya"),
+      specialization: appt.department || (isNaveen ? "Cardiology" : "General Medicine"),
+      department: appt.department || (isNaveen ? "Cardiology" : "General Medicine"),
       hospital_name: appt.hospital || "Hospital B (CareBridge Central)",
-      room_number: "Room OPD-03 (Ground Floor)",
+      room_number: isNaveen ? "Room CARD-01 (1st Floor)" : "Room OPD-03 (Ground Floor)",
       date: appt.date || "Today",
       time: appt.time || "10:30 AM",
       simulated_wait_min: appt.simulated_wait_min || 10,
-      current_serving_token: "GM-022",
+      current_serving_token: isNaveen ? "C-24" : "GM-022",
       patients_ahead: 2,
       consultation_fee: appt.consultation_fee || 600,
-      instructions: "Please report 10 minutes prior. Show this token at Room OPD-03 Desk."
+      instructions: `Please report 10 minutes prior. Show this token at ${isNaveen ? 'Room CARD-01' : 'Room OPD-03'} Desk.`
     };
   };
 
-  const filteredPatients = SAMPLE_PATIENTS_ROSTER.filter((p) => {
+  // Dynamic appointments from SQLite & Firebase mapped to roster records
+  const dynamicAppointmentsRoster: HospitalPatientRecord[] = (appointments || [])
+    .filter((a) => a && a.patient_name && a.doctor_name)
+    .map((a) => {
+      const aIsCardio = (a.department || '').toLowerCase().includes('cardio') || (a.doctor_name || '').toLowerCase().includes('naveen') || (a.doctor_name || '').toLowerCase().includes('anil');
+      return {
+        id: `PAT-DB${a.id}`,
+        name: a.patient_name,
+        nameTelugu: a.patient_name,
+        age: 38,
+        gender: "Patient",
+        phone: "+91 98480 55443",
+        condition: a.reason || `${a.department || 'Clinical'} Consultation`,
+        doctor: a.doctor_name,
+        dept: a.department || (aIsCardio ? "Cardiology" : "General Medicine"),
+        room: (a as any).room_number || (aIsCardio ? "Room CARD-01" : "Room OPD-03"),
+        token: a.token_number_str || String(a.token_number || (aIsCardio ? 'C-24' : 'GM-024')),
+        status: (a.status === 'COMPLETED' ? 'Completed' : a.status === 'CONFIRMED' ? 'Waiting' : 'Waiting') as any,
+        lastVisit: a.date || "Today",
+        risk: "Normal" as any
+      };
+    });
+
+  const combinedRoster = [...SAMPLE_PATIENTS_ROSTER, ...dynamicAppointmentsRoster];
+  // Deduplicate by ID
+  const uniqueRoster = Array.from(new Map(combinedRoster.map((p) => [p.id, p])).values());
+
+  // Strict Role-Based Isolation:
+  // If doctor, ONLY show patients consulting THIS doctor!
+  // If patient, strictly isolate to ONLY this patient's token record (never show other patients' tokens or queues)
+  const isPatient = currentProfile.role === 'patient';
+  const patientNameLower = (currentProfile.name || '').toLowerCase();
+  const patientUid = (currentProfile.patient_uid || '').toUpperCase();
+
+  const scopedPatientsRoster = isDoctor
+    ? uniqueRoster.filter((p) => {
+        const pDoc = (p.doctor || '').toLowerCase();
+        if (isNaveen) return pDoc.includes('naveen') || pDoc.includes('anil');
+        if (isPriya) return pDoc.includes('priya');
+        const cleanDoc = currentProfile.name.replace(/^dr\.\s*/i, '').trim().toLowerCase();
+        return pDoc.includes(cleanDoc);
+      })
+    : isPatient
+    ? (() => {
+        const matched = uniqueRoster.filter((p) => {
+          const pName = (p.name || '').toLowerCase();
+          const pUid = (p.id || '').toUpperCase();
+          const matchName = Boolean(patientNameLower && (pName.includes(patientNameLower) || patientNameLower.includes(pName)));
+          const matchUid = Boolean(patientUid && (pUid.includes(patientUid) || patientUid.includes(pUid)));
+          const defaultBhavishya = (!patientNameLower || patientNameLower.includes('bhavishya')) && (pName.includes('bhavishya') || pUid === 'PAT-1000');
+          return matchName || matchUid || defaultBhavishya;
+        });
+        if (matched.length > 0) return matched;
+        if (isNewPortal) return [];
+        const isMythri = (currentProfile.name || '').toLowerCase().includes('mythri') || currentProfile.id === 9;
+        return [{
+          id: currentProfile.patient_uid || (isMythri ? "PAT-D7F2" : "PAT-1000"),
+          name: currentProfile.name || (isMythri ? "Mythri" : "Bhavishya"),
+          nameTelugu: isMythri ? "మైత్రి" : "భవిష్య",
+          age: isMythri ? 35 : 28,
+          gender: "Female",
+          phone: currentProfile.phone || (isMythri ? "+91 83093 58353" : "+91 98765 43210"),
+          condition: isMythri ? "Routine Health Checkup & Blood Sugar Monitoring" : "Acute Abdominal Pain & Gastritis",
+          doctor: "Dr. Priya",
+          dept: "General Medicine",
+          room: "Room OPD-03",
+          token: isMythri ? "MY-008" : "GM-024",
+          status: "Waiting" as const,
+          lastVisit: "Today",
+          risk: "Normal" as const
+        }];
+      })()
+    : uniqueRoster;
+
+  const filteredPatients = scopedPatientsRoster.filter((p) => {
     const matchesSearch = 
       p.name.toLowerCase().includes(rosterSearch.toLowerCase()) ||
       p.id.toLowerCase().includes(rosterSearch.toLowerCase()) ||
@@ -256,23 +516,48 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-200">
-                Patient Management • రోగి పోర్టల్
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                isDoctor ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-blue-50 text-blue-600 border border-blue-200'
+              }`}>
+                {isDoctor 
+                  ? (isNaveen ? 'Cardiology OPD Roster • డా. నవీన్ కుమార్ రోగుల జాబితా' : isPriya ? 'General Medicine OPD Roster • డా. ప్రియ రోగుల జాబితా' : `${currentProfile.name} • Patient Consultations`)
+                  : 'Patient Management • రోగి పోర్టల్'}
               </span>
               <span className="text-xs text-slate-400">
-                Patient ID: <strong className="text-slate-700">{currentProfile.patient_uid || "PAT-1000"}</strong>
+                {isDoctor ? 'Doctor ID:' : 'Patient ID:'} <strong className="text-slate-700">{currentProfile.patient_uid || (isNaveen ? "DOC-2041" : isPriya ? "DOC-2042" : "PAT-1000")}</strong>
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-              <span>Welcome, {currentProfile.name || "Bhavishya"}</span>
+              {isDoctor ? (
+                <>
+                  <Stethoscope className="h-7 w-7 text-blue-600" />
+                  <span>{currentProfile.name} • Assigned Patient Consultations</span>
+                </>
+              ) : (
+                <span>Welcome, {currentProfile.name || "Bhavishya"}</span>
+              )}
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Track your real-time waiting token, doctor consultation status, hospital directions, and prescriptions without medical jargon.
+              {isDoctor 
+                ? (isNaveen 
+                    ? "Showing exclusively patients consulting Dr. Naveen Kumar (Cardiology • Room CARD-01)."
+                    : isPriya 
+                    ? "Showing exclusively patients consulting Dr. Priya (General Medicine • Room OPD-03)."
+                    : `Showing exclusively patients scheduled to consult ${currentProfile.name}.`)
+                : "Track your real-time waiting token, doctor consultation status, hospital directions, and prescriptions without medical jargon."}
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
-            {onViewJourney && (
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+            <button
+              onClick={() => setExportModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              title="Download patient visits data in CSV or Excel format"
+            >
+              <Download className="w-4 h-4 text-emerald-600" />
+              <span>📥 Export Visits (CSV/Excel)</span>
+            </button>
+            {onViewJourney && !isDoctor && (
               <button
                 onClick={onViewJourney}
                 className="px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
@@ -284,24 +569,26 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
               onClick={onBookNew}
               className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-500/20 transition flex items-center gap-1.5 cursor-pointer"
             >
-              <span>➕ Book Appointment</span>
+              <span>{isDoctor ? '➕ New Booking / Token' : '➕ Book Appointment'}</span>
             </button>
           </div>
         </div>
 
         {/* Tab Switcher: Personal Hub vs Patient Registry Directory */}
         <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
-          <button
-            onClick={() => setActiveSubTab('hub')}
-            className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition flex items-center gap-2 cursor-pointer ${
-              activeSubTab === 'hub'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
-            }`}
-          >
-            <Stethoscope className="w-4 h-4" />
-            <span>My Active Patient Hub (నా కేర్ పోర్టల్)</span>
-          </button>
+          {!isDoctor && (
+            <button
+              onClick={() => setActiveSubTab('hub')}
+              className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition flex items-center gap-2 cursor-pointer ${
+                activeSubTab === 'hub'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+              }`}
+            >
+              <Stethoscope className="w-4 h-4" />
+              <span>My Active Patient Hub (నా కేర్ పోర్టల్)</span>
+            </button>
+          )}
           <button
             onClick={() => setActiveSubTab('directory')}
             className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition flex items-center gap-2 cursor-pointer ${
@@ -311,9 +598,15 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
             }`}
           >
             <Users className="w-4 h-4" />
-            <span>Patient Directory (ఆసుపత్రి పేషెంట్లు)</span>
-            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-600">
-              {SAMPLE_PATIENTS_ROSTER.length}
+            <span>
+              {isDoctor 
+                ? `${currentProfile.name} Patients (రోగుల జాబితా)` 
+                : isPatient
+                ? 'My Live Token & Queue (నా లైవ్ టోకెన్ & క్యూ)'
+                : 'Patient Directory (ఆసుపత్రి పేషెంట్లు)'}
+            </span>
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-600 font-bold">
+              {scopedPatientsRoster.length}
             </span>
           </button>
         </div>
@@ -740,13 +1033,19 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                     View verified medicines, dosages in English & Telugu, and timing guidance issued by your consulting doctor.
                   </p>
                 </div>
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
-                  <div className="flex items-center justify-between font-semibold text-slate-800">
-                    <span>Tab. Metformin 500mg</span>
-                    <span className="text-emerald-600 font-mono font-bold">1-0-1</span>
+                {isNewPortal ? (
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-center text-slate-500">
+                    No active prescriptions on file. Prescriptions issued by your doctor will appear here.
                   </div>
-                  <p className="text-[11px] text-slate-500">After food (భోజనం తర్వాత) • 30 days</p>
-                </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+                    <div className="flex items-center justify-between font-semibold text-slate-800">
+                      <span>Tab. Metformin 500mg</span>
+                      <span className="text-emerald-600 font-mono font-bold">1-0-1</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">After food (భోజనం తర్వాత) • 30 days</p>
+                  </div>
+                )}
 
                 <button
                   onClick={() => {
@@ -776,13 +1075,19 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                     Recommended follow-up visit and automated reminders before your prescription finishes.
                   </p>
                 </div>
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
-                  <div className="flex items-center justify-between font-semibold text-slate-800">
-                    <span>Next Follow-up Due</span>
-                    <span className="text-purple-600 font-bold">In 3 Weeks</span>
+                {isNewPortal ? (
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-center text-slate-500">
+                    No follow-up visits scheduled yet.
                   </div>
-                  <p className="text-[11px] text-slate-500">Dr. Priya recommended check on abdominal stabilization.</p>
-                </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+                    <div className="flex items-center justify-between font-semibold text-slate-800">
+                      <span>Next Follow-up Due</span>
+                      <span className="text-purple-600 font-bold">In 3 Weeks</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">Dr. Priya recommended check on abdominal stabilization.</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -822,9 +1127,34 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
           </div>
         )}
 
-        {/* SUBTAB 2: HOSPITAL PATIENT DIRECTORY (ERP ROSTER) */}
+        {/* SUBTAB 2: HOSPITAL PATIENT DIRECTORY / PATIENT QUEUE STATUS */}
         {activeSubTab === 'directory' && (
           <div className="space-y-4">
+            {/* Patient Privacy & Queue Isolation Banner */}
+            {isPatient && (
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Shield className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                      <span>{currentProfile.name || "Patient"} • Private OPD Token & Queue Status</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white">
+                        Private View
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      మీ వ్యక్తిగత ఓపీడీ టోకెన్ మరియు క్యూ స్థితి మాత్రమే ఇక్కడ చూపబడుతుంది. ఇతర రోగుల టోకెన్లు లేదా వైద్య సమాచారం గోప్యతా రక్షణ (DISHA & HIPAA) ప్రకారం దాచబడ్డాయి.
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0 self-start sm:self-auto">
+                  🔒 HIPAA / DISHA Isolated
+                </span>
+              </div>
+            )}
+
             {/* Search and Filter Controls */}
             <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
               <div className="relative flex-1 w-full sm:max-w-md">
@@ -833,7 +1163,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                   type="text"
                   value={rosterSearch}
                   onChange={(e) => setRosterSearch(e.target.value)}
-                  placeholder="Search patient by name, UID, condition, or doctor..."
+                  placeholder={isPatient ? "Search your token or appointment details..." : "Search patient by name, UID, condition, or doctor..."}
                   className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -852,6 +1182,15 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                     {st}
                   </button>
                 ))}
+
+                <button
+                  onClick={() => setExportModalOpen(true)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs whitespace-nowrap ml-1"
+                  title="Download CSV or Excel report"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>📥 Export (CSV/Excel)</span>
+                </button>
               </div>
             </div>
 
@@ -980,6 +1319,13 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Export Patient Footfall (CSV / Excel) Modal */}
+      <ExportPatientVisitsModal
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        doctorName={isDoctor ? currentProfile.name : undefined}
+      />
     </div>
   );
 };

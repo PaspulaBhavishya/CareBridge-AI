@@ -70,12 +70,10 @@ export const MedicalErpSidebar: React.FC<MedicalErpSidebarProps> = ({
           { id: 'patient_hub', label: t.patients, icon: Users },
           { id: 'chat', label: t.appointments, icon: Calendar, badge: 'AI Agent' },
           { id: 'prescriptions', label: t.prescriptions, icon: Pill },
-          { id: 'scanner', label: t.lab_reports, icon: FlaskConical },
-          { id: 'smartflow', label: t.treatment_plans, icon: ClipboardList },
+          { id: 'treatment_plans', label: t.treatment_plans, icon: ClipboardList },
           { id: 'medical_records', label: t.medical_records, icon: FileText },
           { id: 'safety_center', label: t.ai_diagnosis, icon: Brain },
           { id: 'staff', label: t.tasks, icon: CheckSquare },
-          { id: 'analytics', label: t.analytics, icon: BarChart3 },
           { id: 'token_tracker', label: t.token_queue_rooms, icon: Building2 },
           { id: 'messages', label: t.messages, icon: MessageSquare, badgeCount: unreadCount },
           { id: 'settings', label: t.settings, icon: Settings }
@@ -88,7 +86,7 @@ export const MedicalErpSidebar: React.FC<MedicalErpSidebarProps> = ({
           { id: 'chat', label: t.appointments, icon: Calendar, badge: 'AI Agent' },
           { id: 'prescriptions', label: t.prescriptions, icon: Pill },
           { id: 'scanner', label: t.lab_reports, icon: FlaskConical },
-          { id: 'smartflow', label: t.treatment_plans, icon: ClipboardList },
+          { id: 'treatment_plans', label: t.treatment_plans, icon: ClipboardList },
           { id: 'my_passes', label: t.billing_invoices, icon: CreditCard },
           { id: 'medical_records', label: t.medical_records, icon: FileText },
           { id: 'safety_center', label: t.ai_diagnosis, icon: Brain },
@@ -129,8 +127,7 @@ export const MedicalErpSidebar: React.FC<MedicalErpSidebarProps> = ({
           const isActive = 
             activeTab === item.id || 
             (item.id === 'prescriptions' && (role === 'doctor' ? activeTab === 'doctor_dashboard' : activeTab === 'prescriptions')) ||
-            (item.id === 'medical_records' && activeTab === 'patient_hub') ||
-            (item.id === 'analytics' && activeTab === 'smartflow');
+            (item.id === 'analytics' && (activeTab === 'analytics' || activeTab === 'smartflow'));
 
           return (
             <button
@@ -143,11 +140,12 @@ export const MedicalErpSidebar: React.FC<MedicalErpSidebarProps> = ({
                     onTabChange('doctor_dashboard');
                   }
                 }
-                else if (item.id === 'medical_records') onTabChange('patient_hub');
-                else if (item.id === 'analytics') onTabChange('smartflow');
-                else if (item.id === 'safety_center') onTabChange('chat');
+                else if (item.id === 'medical_records') onTabChange('medical_records');
+                else if (item.id === 'treatment_plans') onTabChange('treatment_plans');
+                else if (item.id === 'analytics') onTabChange('analytics');
+                else if (item.id === 'safety_center') onTabChange('safety_center');
                 else if (item.id === 'messages') onTabChange('messages');
-                else if (item.id === 'settings') onTabChange('patient_hub');
+                else if (item.id === 'settings') onTabChange('settings');
                 else onTabChange(item.id);
               }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${

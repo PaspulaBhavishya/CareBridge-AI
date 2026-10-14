@@ -142,6 +142,24 @@ export const MedicalErpHeader: React.FC<MedicalErpHeaderProps> = ({
                     <div className="text-[10px] text-slate-500">Zero-tolerance DPDP/HIPAA RBAC block</div>
                   </div>
                 </button>
+                <button
+                  onClick={() => {
+                    setJudgeMenuOpen(false);
+                    onRunJudgeScenario(
+                      5,
+                      "Naaku general medicine doctor appointment kavali, waiting time takkuva unna doctor ni book cheyyi",
+                      "patient_mythri" as any,
+                      "te"
+                    );
+                  }}
+                  className="w-full text-left p-2 rounded-xl hover:bg-pink-50 text-slate-800 flex items-start gap-2 transition cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 text-pink-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-bold text-pink-900">Scenario 5: New Patient Portal (Mythri)</div>
+                    <div className="text-[10px] text-slate-500">కొత్త పేషెంట్ పోర్టల్ • Clean State & AI Booking</div>
+                  </div>
+                </button>
 
                 {onResetDemo && (
                   <div className="pt-1.5 mt-1 border-t border-slate-100">

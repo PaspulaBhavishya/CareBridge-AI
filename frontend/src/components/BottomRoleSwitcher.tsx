@@ -5,7 +5,7 @@ import { getTranslation } from '../utils/translations';
 
 interface BottomRoleSwitcherProps {
   currentProfile: UserProfile;
-  onSwitchRole: (role: UserRole | string) => void;
+  onSwitchRole: (role: UserRole | string | number) => void;
   onSignOut: () => void;
   language?: string;
 }
@@ -18,13 +18,20 @@ export const BottomRoleSwitcher: React.FC<BottomRoleSwitcherProps> = ({
 }) => {
   const t = getTranslation(language);
 
+  const isNewPatient =
+    currentProfile.role === 'patient' && (
+      currentProfile.is_new === true ||
+      currentProfile.badge === 'New Patient Portal' ||
+      currentProfile.id === 9 ||
+      Boolean(currentProfile.name?.toLowerCase().includes('mythri'))
+    );
   const isPatientTelugu =
-    currentProfile.role === 'patient' && currentProfile.languagePref === 'Telugu';
+    currentProfile.role === 'patient' && currentProfile.languagePref === 'Telugu' && !isNewPatient;
   const isPatientEN =
-    currentProfile.role === 'patient' && currentProfile.languagePref !== 'Telugu';
+    currentProfile.role === 'patient' && currentProfile.languagePref !== 'Telugu' && !isNewPatient;
   const isDoctor = currentProfile.role === 'doctor';
-  const isReceptionist = currentProfile.role === 'receptionist';
   const isAdmin = currentProfile.role === 'admin';
+  const isReceptionist = currentProfile.role === 'receptionist';
 
   return (
     <aside aria-label="Demo role switcher" className="fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-slate-800/90 shadow-2xl py-2 px-3 sm:px-6">
@@ -57,6 +64,20 @@ export const BottomRoleSwitcher: React.FC<BottomRoleSwitcherProps> = ({
             <span>{t.role_btn_patient_en}</span>
           </button>
 
+          {/* Patient Mythri / New Patient Portal */}
+          <button
+            onClick={() => onSwitchRole(currentProfile.id && currentProfile.id !== 9 && isNewPatient ? currentProfile.id : 'patient_mythri')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              isNewPatient
+                ? 'bg-rose-500 text-white shadow-md shadow-rose-500/30 font-bold ring-2 ring-rose-400/50'
+                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+            }`}
+            title="Switch to New Patient Portal"
+          >
+            <User className="h-3.5 w-3.5" />
+            <span>{isNewPatient && currentProfile.id !== 9 ? `${currentProfile.name.split(' ')[0]} (New Portal)` : t.role_btn_patient_mythri}</span>
+          </button>
+
           {/* Patient Telugu */}
           <button
             onClick={() => onSwitchRole('patient_telugu')}
@@ -79,7 +100,7 @@ export const BottomRoleSwitcher: React.FC<BottomRoleSwitcherProps> = ({
                 ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/30 font-bold ring-2 ring-cyan-400/50'
                 : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
             }`}
-            title="Switch to Hospital Doctor Persona (Dr. Anil Kumar)"
+            title="Switch to Hospital Doctor Persona (Dr. Naveen Kumar)"
           >
             <Stethoscope className="h-3.5 w-3.5" />
             <span>{t.role_btn_doctor}</span>

@@ -4,7 +4,7 @@ import {
   CheckCircle2, UserPlus, LogOut, Stethoscope, Ticket, Tv, FileText, Printer,
   HeartHandshake, BarChart3, Bell, Zap
 } from 'lucide-react';
-import type { UserProfile, UserRole } from '../types';
+import type { UserProfile } from '../types';
 
 interface HeaderProps {
   currentProfile: UserProfile;
@@ -28,7 +28,7 @@ interface HeaderProps {
   onStartJudgeDemo?: () => void;
 }
 
-export const USER_PROFILES: Record<UserRole, UserProfile> = {
+export const USER_PROFILES: Record<string, UserProfile> = {
   patient: {
     id: 1,
     name: "Bhavishya",
@@ -39,6 +39,18 @@ export const USER_PROFILES: Record<UserRole, UserProfile> = {
     badge: "Patient Portal",
     patient_uid: "PAT-1000",
     phone: "+91 98765 43210"
+  },
+  patient_mythri: {
+    id: 9,
+    name: "Mythri",
+    role: "patient",
+    languagePref: "English",
+    description: "New Patient (మైత్రి - Fresh Portal)",
+    avatar: "MY",
+    badge: "New Patient Portal",
+    patient_uid: "PAT-D7F2",
+    phone: "+91 83093 58353",
+    is_new: true
   },
   patient_telugu: {
     id: 2,
@@ -75,15 +87,29 @@ export const USER_PROFILES: Record<UserRole, UserProfile> = {
   },
   doctor: {
     id: 5,
-    name: "Dr. Anil Kumar",
+    name: "Dr. Naveen Kumar",
     role: "doctor",
     languagePref: "Telugu / English",
     description: "Lead Cardiologist (CareBridge Guntur)",
-    avatar: "AK",
+    avatar: "NK",
     badge: "Hospital Doctor",
     patient_uid: "DOC-2041",
     phone: "+91 98480 22334",
-    specialization: "Cardiologist"
+    specialization: "Cardiologist",
+    room_number: "Room 102 (1st Floor)"
+  },
+  doctor_priya: {
+    id: 7,
+    name: "Dr. Priya",
+    role: "doctor",
+    languagePref: "Telugu / English",
+    description: "Consultant Physician (General Medicine)",
+    avatar: "DP",
+    badge: "Hospital Doctor",
+    patient_uid: "DOC-2042",
+    phone: "+91 98480 99887",
+    specialization: "General Medicine",
+    room_number: "Room OPD-03"
   }
 };
 
@@ -527,17 +553,6 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Stethoscope className="h-3.5 w-3.5" />
               <span>Doctor OPD Roster & Patient Queue (వైద్యుల ఓపీడీ)</span>
-            </button>
-            <button
-              onClick={() => onTabChange('scanner')}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition flex items-center gap-2 ${
-                activeTab === 'scanner'
-                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 font-bold'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
-              }`}
-            >
-              <FileText className="h-3.5 w-3.5 text-teal-400" />
-              <span>Lab Report Scanner (ల్యాబ్ రిపోర్ట్స్)</span>
             </button>
             <button
               onClick={() => onTabChange('tv')}

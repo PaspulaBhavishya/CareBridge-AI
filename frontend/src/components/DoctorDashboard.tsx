@@ -43,12 +43,129 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
     ? (currentProfile.preferred_hospital || 'Hospital B (Metro Multi-Specialty)') 
     : 'Hospital B (Metro Multi-Specialty)';
 
-  // Filter appointments for this doctor if matching, else show demo queue
-  const docAppointments = appointments.filter(
-    (a) => a.doctor_name && a.doctor_name.toLowerCase().includes(doctorDisplayName.split(' ').pop()?.toLowerCase() || '')
-  );
+  const isNaveen = doctorDisplayName.toLowerCase().includes('naveen') || doctorDisplayName.toLowerCase().includes('anil');
+  const isPriya = doctorDisplayName.toLowerCase().includes('priya');
 
-  const displayQueue = docAppointments.length > 0 ? docAppointments : appointments.slice(0, 5);
+  // Filter appointments for this doctor if matching
+  const docAppointments = appointments.filter((a) => {
+    const aDoc = (a.doctor_name || '').toLowerCase();
+    if (isNaveen) return aDoc.includes('naveen') || aDoc.includes('anil');
+    if (isPriya) return aDoc.includes('priya');
+    return aDoc.includes(doctorDisplayName.split(' ').pop()?.toLowerCase() || '');
+  });
+
+  // Doctor-specific fallback queue so doctors NEVER see each other's patients
+  const defaultNaveenQueue: AppointmentRecord[] = [
+    {
+      id: 201,
+      confirmation_code: "CB-2026-CARD01",
+      patient_name: "S. Murthy",
+      doctor_name: "Dr. Naveen Kumar",
+      department: "Cardiology",
+      hospital: "Hospital B (CareBridge Central)",
+      date: "Today",
+      time: "10:00 AM",
+      token_number: 24,
+      token_number_str: "C-24",
+      simulated_wait_min: 5,
+      smartflow_score: 92,
+      status: "CONFIRMED",
+      reason: "Cardiac Arrhythmia & Hypertension consultation",
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 202,
+      confirmation_code: "CB-2026-CARD02",
+      patient_name: "K. Rajesh Varma",
+      doctor_name: "Dr. Naveen Kumar",
+      department: "Cardiology",
+      hospital: "Hospital B (CareBridge Central)",
+      date: "Today",
+      time: "10:30 AM",
+      token_number: 25,
+      token_number_str: "C-25",
+      simulated_wait_min: 15,
+      smartflow_score: 88,
+      status: "CONFIRMED",
+      reason: "Coronary Artery Disease review",
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 203,
+      confirmation_code: "CB-2026-CARD03",
+      patient_name: "V. Subba Rao",
+      doctor_name: "Dr. Naveen Kumar",
+      department: "Cardiology",
+      hospital: "Hospital B (CareBridge Central)",
+      date: "Today",
+      time: "11:00 AM",
+      token_number: 26,
+      token_number_str: "C-26",
+      simulated_wait_min: 25,
+      smartflow_score: 85,
+      status: "CONFIRMED",
+      reason: "Post-Angioplasty Stent follow-up",
+      created_at: new Date().toISOString()
+    }
+  ];
+
+  const defaultPriyaQueue: AppointmentRecord[] = [
+    {
+      id: 101,
+      confirmation_code: "CB-2026-GM024",
+      patient_name: "Bhavishya",
+      doctor_name: "Dr. Priya",
+      department: "General Medicine",
+      hospital: "Hospital B (CareBridge Central)",
+      date: "Today",
+      time: "10:30 AM",
+      token_number: 24,
+      token_number_str: "GM-024",
+      simulated_wait_min: 10,
+      smartflow_score: 80,
+      status: "CONFIRMED",
+      reason: "Acute Abdominal Pain & Gastritis",
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 102,
+      confirmation_code: "CB-2026-GM025",
+      patient_name: "Ravi Kumar",
+      doctor_name: "Dr. Priya",
+      department: "General Medicine",
+      hospital: "Hospital B (CareBridge Central)",
+      date: "Today",
+      time: "11:00 AM",
+      token_number: 25,
+      token_number_str: "GM-025",
+      simulated_wait_min: 20,
+      smartflow_score: 82,
+      status: "CONFIRMED",
+      reason: "Seasonal Viral Pyrexia & Fatigue",
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 103,
+      confirmation_code: "CB-2026-GM026",
+      patient_name: "K. Anitha",
+      doctor_name: "Dr. Priya",
+      department: "General Medicine",
+      hospital: "Hospital B (CareBridge Central)",
+      date: "Today",
+      time: "11:30 AM",
+      token_number: 26,
+      token_number_str: "GM-026",
+      simulated_wait_min: 30,
+      smartflow_score: 78,
+      status: "CONFIRMED",
+      reason: "Type 2 Diabetes checkup",
+      created_at: new Date().toISOString()
+    }
+  ];
+
+  const displayQueue = docAppointments.length > 0 
+    ? docAppointments 
+    : (isNaveen ? defaultNaveenQueue : defaultPriyaQueue);
 
   const triggerQueueAlert = async (tokenNum: number, patientName: string) => {
     try {
@@ -182,10 +299,10 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
             CareBridge AI Connected
           </div>
           <button
-            onClick={() => onNavigateToTab('scanner')}
+            onClick={() => onNavigateToTab('safety_center')}
             className="text-[11px] text-blue-600 hover:underline mt-1 flex items-center gap-1 cursor-pointer font-medium"
           >
-            <span>Scan Lab Reports / Rx</span>
+            <span>AI Diagnosis Support</span>
             <ChevronRight className="h-3 w-3" />
           </button>
         </div>

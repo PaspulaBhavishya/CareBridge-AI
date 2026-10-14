@@ -42,6 +42,7 @@ def migrate_db():
                 conn.commit()
         except Exception as e:
             print("DB migration check note:", e)
+    Base.metadata.create_all(bind=engine)
 
 migrate_db()
 

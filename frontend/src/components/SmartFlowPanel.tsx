@@ -66,7 +66,7 @@ export const SmartFlowPanel: React.FC<SmartFlowPanelProps> = ({ onSelectHospital
     },
     telugu_doctor: {
       hospital: 'Hospital B (Metro Health Center)',
-      doctor: 'Dr. Anil Kumar (Cardiology)',
+      doctor: 'Dr. Naveen Kumar (Cardiology)',
       time: '10:30 AM Tomorrow',
       wait: 15,
       score: 94,

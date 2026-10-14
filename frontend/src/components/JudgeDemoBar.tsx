@@ -67,6 +67,20 @@ export const JudgeDemoBar: React.FC<JudgeDemoBarProps> = ({
       subtitleColor: "text-rose-700",
       playColor: "text-rose-500",
       icon: <ShieldAlert className="h-4 w-4 text-rose-600" />
+    },
+    {
+      id: 5,
+      title: "Scenario 5: New Patient Portal (Mythri)",
+      subtitle: "కొత్త పేషెంట్ పోర్టల్ • Fresh State & AI Booking",
+      message: "Naaku general medicine doctor appointment kavali, waiting time takkuva unna doctor ni book cheyyi",
+      role: "patient_mythri" as UserRole,
+      lang: "te",
+      badge: "New Patient Portal",
+      color: "from-pink-50 to-rose-50/70 border-pink-200 text-pink-800 hover:border-pink-300",
+      titleColor: "text-pink-950",
+      subtitleColor: "text-pink-700",
+      playColor: "text-pink-500",
+      icon: <Sparkles className="h-4 w-4 text-pink-600" />
     }
   ];
 
@@ -92,7 +106,7 @@ export const JudgeDemoBar: React.FC<JudgeDemoBarProps> = ({
         </div>
 
         {/* 1-Click Scenario Buttons */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 w-full md:w-auto">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2 w-full md:w-auto">
           {scenarios.map((s) => {
             const isActive = activeScenario === s.id;
             return (

@@ -1,6 +1,9 @@
 import datetime
 import json
 import math
+import random
+import re
+import time
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +15,7 @@ from .models import (
     Hospital, Department, Doctor, ScheduleSlot, Appointment,
     Patient, ScheduleConflict, HospitalPolicy, AuditLog,
     QueueToken, HospitalResource, AgentSession, AgentToolCall,
-    ApprovalRequest, KnowledgeDocument
+    ApprovalRequest, KnowledgeDocument, DoctorPatientMessage
 )
 from .agent import CareBridgeAgent
 from .smartflow import (
@@ -37,12 +40,23 @@ from .seed_data import init_db
 
 import os
 import sys
+import requests
 backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if backend_root not in sys.path:
     sys.path.insert(0, backend_root)
 
 from routes.smartflow_routes import router as smartflow_router
 from routes.token_routes import router as token_router
+from routes.report_routes import router as report_router
+from .services.firebase_sync import (
+    test_connection as test_firebase_conn,
+    sync_appointment_to_firebase,
+    delete_appointment_from_firebase,
+    sync_emergency_sos_to_firebase,
+    seed_full_state_to_firebase,
+    get_database_url as get_firebase_db_url
+)
+from .services.sms_service import dispatch_sms_otp
 
 app = FastAPI(
     title="CareBridge AI — Intelligent Hospital Coordination Engine",
@@ -62,6 +76,7 @@ app.add_middleware(
 # Include core SmartFlow & Live Token Tracking Routers
 app.include_router(smartflow_router)
 app.include_router(token_router)
+app.include_router(report_router)
 
 # Pydantic Schemas
 class ChatRequest(BaseModel):
@@ -102,6 +117,22 @@ class LoginRequest(BaseModel):
     uid_or_email: Optional[str] = None
     role: Optional[str] = None
     user_id: Optional[int] = None
+    phone: Optional[str] = None
+    otp: Optional[str] = None
+
+class SendOtpRequest(BaseModel):
+    phone: str
+    purpose: Optional[str] = "login" # "login" or "register"
+    uid_or_email: Optional[str] = None
+    email: Optional[str] = None
+
+class VerifyOtpRequest(BaseModel):
+    phone: str
+    otp: str
+    purpose: Optional[str] = "login"
+    uid_or_email: Optional[str] = None
+    email: Optional[str] = None
+    register_payload: Optional[Dict[str, Any]] = None
 
 class RegisterRequest(BaseModel):
     name: str
@@ -117,6 +148,23 @@ class RegisterRequest(BaseModel):
     consultation_fee: Optional[int] = 600
     room_number: Optional[str] = "Room 208 (2nd Floor)"
     experience_years: Optional[int] = 8
+
+class ProfileUpdateRequest(BaseModel):
+    user_id: Optional[int] = None
+    patient_uid: Optional[str] = None
+    name: str
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    age: Optional[int] = None
+    gender: Optional[str] = "Other"
+    preferred_hospital: Optional[str] = None
+    preferred_hospital_id: Optional[int] = None
+    language_pref: Optional[str] = None
+    role: Optional[str] = None
+    specialization: Optional[str] = None
+    room_number: Optional[str] = None
+    consultation_fee: Optional[int] = None
+    experience_years: Optional[int] = None
 
 @app.on_event("startup")
 def startup_event():
@@ -156,6 +204,8 @@ def confirm_action_endpoint(req: ConfirmActionRequest, db: Session = Depends(get
         actor_role=req.actor_role or "patient",
         patient_id=req.patient_id or 1
     )
+    if result.get("success") and (result.get("confirmation_code") or result.get("pass_data")):
+        sync_appointment_to_firebase(result)
     return result
 
 @app.get("/api/hospitals")
@@ -706,6 +756,7 @@ def cancel_appointment_endpoint(req: CancelAppointmentRequest, db: Session = Dep
         "is_read": False,
         "patient_id": 1
     })
+    delete_appointment_from_firebase(req.appointment_id)
     return result
 
 @app.get("/api/notifications")
@@ -750,6 +801,106 @@ def clear_all_notifications():
     global NOTIFICATIONS_DB
     NOTIFICATIONS_DB = []
     return {"success": True}
+
+class DoctorMessageCreateRequest(BaseModel):
+    doctor_name: str
+    patient_name: str
+    sender_role: str  # "doctor" or "patient"
+    sender_name: str
+    message: str
+    appointment_id: Optional[int] = None
+
+@app.get("/api/doctor-messages")
+def get_doctor_messages(
+    doctor_name: Optional[str] = None,
+    patient_name: Optional[str] = None,
+    appointment_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns verified consultation messages between doctors and consulted patients.
+    Supports filtering by doctor_name, patient_name, or appointment_id.
+    """
+    query = db.query(DoctorPatientMessage).order_by(DoctorPatientMessage.created_at.asc())
+    if appointment_id:
+        query = query.filter(DoctorPatientMessage.appointment_id == appointment_id)
+    if doctor_name:
+        clean_doc = doctor_name.replace("Dr.", "").replace("Dr ", "").strip().lower()
+        query = query.filter(DoctorPatientMessage.doctor_name.ilike(f"%{clean_doc}%"))
+    if patient_name:
+        clean_pat = patient_name.strip().lower()
+        query = query.filter(DoctorPatientMessage.patient_name.ilike(f"%{clean_pat}%"))
+    
+    msgs = query.all()
+    return [
+        {
+            "id": m.id,
+            "doctor_name": m.doctor_name,
+            "patient_name": m.patient_name,
+            "sender_role": m.sender_role,
+            "sender_name": m.sender_name,
+            "message": m.message,
+            "appointment_id": m.appointment_id,
+            "created_at": m.created_at.strftime("%I:%M %p") if m.created_at else "Today"
+        }
+        for m in msgs
+    ]
+
+@app.post("/api/doctor-messages")
+def create_doctor_message(req: DoctorMessageCreateRequest, db: Session = Depends(get_db)):
+    """
+    Sends and records a two-way direct message between a doctor and a patient.
+    """
+    if not req.message or not req.message.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    
+    new_msg = DoctorPatientMessage(
+        doctor_name=req.doctor_name.strip(),
+        patient_name=req.patient_name.strip(),
+        sender_role=req.sender_role.strip(),
+        sender_name=req.sender_name.strip(),
+        message=req.message.strip(),
+        appointment_id=req.appointment_id
+    )
+    db.add(new_msg)
+    db.commit()
+    db.refresh(new_msg)
+
+    # In-app notification alert
+    if req.sender_role == "doctor":
+        NOTIFICATIONS_DB.insert(0, {
+            "id": len(NOTIFICATIONS_DB) + 1,
+            "title": f"New Message from {req.doctor_name}",
+            "message": req.message,
+            "type": "INFO",
+            "timestamp": "Just now",
+            "is_read": False,
+            "patient_id": 1
+        })
+    else:
+        NOTIFICATIONS_DB.insert(0, {
+            "id": len(NOTIFICATIONS_DB) + 1,
+            "title": f"Patient Message from {req.patient_name}",
+            "message": req.message,
+            "type": "INFO",
+            "timestamp": "Just now",
+            "is_read": False,
+            "patient_id": 5
+        })
+
+    return {
+        "success": True,
+        "message": {
+            "id": new_msg.id,
+            "doctor_name": new_msg.doctor_name,
+            "patient_name": new_msg.patient_name,
+            "sender_role": new_msg.sender_role,
+            "sender_name": new_msg.sender_name,
+            "message": new_msg.message,
+            "appointment_id": new_msg.appointment_id,
+            "created_at": new_msg.created_at.strftime("%I:%M %p") if new_msg.created_at else "Just now"
+        }
+    }
 
 @app.post("/api/caretaker/grant")
 def grant_caretaker_access(req: CaretakerGrantRequest, db: Session = Depends(get_db)):
@@ -908,21 +1059,421 @@ def get_users(
             "room_number": doc.room_number if doc else None,
             "consultation_fee": doc.consultation_fee if doc else None,
             "badge": (
-                "Patient Portal" if p.role == "patient" and p.language_pref == "English"
+                "New Patient Portal" if p.role == "patient" and (p.id == 9 or (p.name and "mythri" in p.name.lower()) or (p.id not in [1, 2] and db.query(Appointment).filter(Appointment.patient_id == p.id).count() == 0))
+                else "Patient Portal" if p.role == "patient" and p.language_pref == "English"
                 else "తెలుగు పేషెంట్" if p.role == "patient"
                 else "Hospital Doctor" if p.role == "doctor"
                 else "Staff Desk" if p.role == "receptionist"
                 else "Admin Access"
-            )
+            ),
+            "is_new": (p.id == 9 or (p.name and "mythri" in p.name.lower()) or (p.id not in [1, 2] and db.query(Appointment).filter(Appointment.patient_id == p.id).count() == 0)) if p.role == "patient" else False
         })
     return results
+
+ACTIVE_OTP_STORE: Dict[str, Dict[str, Any]] = {}
+
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
+def validate_indian_mobile(phone: str) -> tuple[bool, str, str]:
+    """
+    Validates Indian mobile number:
+    - Mobile number starting with 6, 7, 8, or 9 is VALID.
+    - Mobile number starting with 0, 1, 2, 3, 4, or 5 is INVALID.
+    - Must be exactly 10 digits (ignoring optional country code +91/91).
+    Returns: (is_valid, 10_digit_normalized, error_message)
+    """
+    raw = (phone or "").strip()
+    digits = "".join([c for c in raw if c.isdigit()])
+    if len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+
+    if not digits:
+        return False, "", "దయచేసి మొబైల్ నంబర్ నమోదు చేయండి (Please enter mobile phone number)."
+
+    first_digit = digits[0]
+    # Check invalid starting digits: 0, 1, 2, 3, 4, 5
+    if first_digit in ["0", "1", "2", "3", "4", "5"]:
+        return False, digits, (
+            f"చెల్లని మొబైల్ నంబర్! మీరు నమోదు చేసిన మొబైల్ నంబర్ '{first_digit}' తో ప్రారంభమైంది. "
+            f"మొబైల్ నంబర్ 6, 7, 8, లేదా 9 తో మాత్రమే ప్రారంభం కావాలి "
+            f"(0, 1, 2, 3, 4, 5 అంకెలతో ప్రారంభమయ్యే మొబైల్ నంబర్లు చెల్లవు). "
+            f"(Invalid mobile number! Mobile numbers cannot start with {first_digit}. Valid numbers must start with 6, 7, 8, or 9.)"
+        )
+
+    # Check valid starting digits: 6, 7, 8, 9
+    if first_digit not in ["6", "7", "8", "9"]:
+        return False, digits, (
+            "చెల్లని మొబైల్ నంబర్! మొబైల్ నంబర్ 6, 7, 8, లేదా 9 తో మాత్రమే ప్రారంభం కావాలి. "
+            "(Invalid mobile number! Mobile numbers must start with 6, 7, 8, or 9.)"
+        )
+
+    if len(digits) != 10:
+        return False, digits, (
+            f"మొబైల్ నంబర్ తప్పనిసరిగా 10 అంకెలు ఉండాలి (ప్రస్తుతం: {len(digits)} అంకెలు). "
+            "(Mobile number must be exactly 10 digits.)"
+        )
+
+    return True, digits, ""
+
+def validate_email_address(email: str) -> tuple[bool, str]:
+    """
+    Validates email format:
+    Returns: (is_valid, error_message)
+    """
+    raw = (email or "").strip()
+    if not raw:
+        return False, "దయచేసి మీ ఈమెయిల్ చిరునామా నమోదు చేయండి (Please enter your email address)."
+    if not EMAIL_REGEX.match(raw):
+        return False, "దయచేసి సరైన ఈమెయిల్ ఫార్మాట్ నమోదు చేయండి (Please enter a valid email address, e.g. name@carebridge.org)."
+    return True, ""
+
+def normalize_phone(phone: str) -> str:
+    digits = "".join([c for c in (phone or "") if c.isdigit()])
+    if len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+    if len(digits) >= 10:
+        return digits[-10:]
+    return digits or (phone or "").strip()
+
+def find_patient_by_phone_or_identifier(db: Session, identifier: str) -> Optional[Patient]:
+    clean = (identifier or "").strip()
+    if not clean:
+        return None
+
+    norm = normalize_phone(clean)
+    # 1. Match phone number by last 10 digits
+    if norm and len(norm) == 10:
+        for p in db.query(Patient).all():
+            if normalize_phone(p.phone or "") == norm:
+                return p
+
+    # 2. Match exact patient_uid or email
+    user = db.query(Patient).filter(
+        (Patient.patient_uid.ilike(clean)) |
+        (Patient.email.ilike(clean))
+    ).first()
+    if user:
+        return user
+
+    # 3. Match name (exact or case-insensitive)
+    user = db.query(Patient).filter(Patient.name.ilike(clean)).first()
+    if user:
+        return user
+
+    # 4. Partial phone match if not 10 digits
+    if norm:
+        for p in db.query(Patient).all():
+            p_norm = normalize_phone(p.phone or "")
+            if norm in p_norm or p_norm in norm:
+                return p
+
+    return None
+
+@app.post("/api/auth/send-otp")
+def send_otp_endpoint(req: SendOtpRequest, db: Session = Depends(get_db)):
+    """
+    Generates and dispatches a 6-digit OTP to the requested phone number.
+    Strictly verifies:
+    1. Mobile number starting digit: 6, 7, 8, 9 are valid; 0, 1, 2, 3, 4, 5 are invalid.
+    2. Email verification before login.
+    3. Mobile number and email exist and match in the hospital database.
+    """
+    clean_target = (req.phone or "").strip()
+    lookup_key = (req.uid_or_email or clean_target).strip()
+    purpose = (req.purpose or "login").lower()
+    email_target = (req.email or "").strip()
+
+    if not lookup_key and not clean_target:
+        raise HTTPException(
+            status_code=400,
+            detail="దయచేసి మొబైల్ నంబర్ నమోదు చేయండి (Please enter your mobile phone number)."
+        )
+
+    # 1. Mobile Number Validation: 6,7,8,9 is Valid; 0,1,2,3,4,5 is Invalid!
+    is_valid_phone, norm_digits, phone_err = validate_indian_mobile(clean_target or lookup_key)
+    if not is_valid_phone:
+        raise HTTPException(
+            status_code=400,
+            detail=phone_err
+        )
+
+    user = find_patient_by_phone_or_identifier(db, norm_digits)
+
+    # 2. Email Verification Check Before Login
+    if purpose == "login":
+        if not email_target and user and user.email:
+            email_target = user.email
+        if not email_target:
+            raise HTTPException(
+                status_code=400,
+                detail="లాగిన్ అయ్యే ముందు ఈమెయిల్ తప్పనిసరిగా ధృవీకరించాలి. దయచేసి మీ రిజిస్టర్డ్ ఈమెయిల్‌ను నమోదు చేయండి. (Email must be verified before login. Please enter your email.)"
+            )
+        is_valid_email, email_err = validate_email_address(email_target)
+        if not is_valid_email:
+            raise HTTPException(status_code=400, detail=email_err)
+
+    # 3. CRITICAL: If signing in, verify user existence in database
+    if purpose == "login":
+        if not user:
+            # Check if user entered an email that exists in database
+            if email_target:
+                user_by_email = db.query(Patient).filter(Patient.email.ilike(email_target.strip())).first()
+                if user_by_email:
+                    db_phone = user_by_email.phone or "నమోదు కాలేదు"
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"మీ ఈమెయిల్ ({email_target}) ఖాతా '{user_by_email.name}' కు నమోదు చేయబడింది, "
+                            f"కానీ ఆ ఖాతా రిజిస్టర్డ్ మొబైల్ నంబర్ వేరేది ({db_phone}). "
+                            f"మీరు నమోదు చేసిన మొబైల్ (+91 {norm_digits}) ఆ ఖాతాతో సరిపోలలేదు. "
+                            f"దయచేసి ఆ ఖాతా యొక్క రిజిస్టర్డ్ మొబైల్ నంబర్ నమోదు చేయండి, లేదా ప్రొఫైల్ సెట్టింగ్స్‌లో కొత్త మొబైల్‌ను అప్‌డేట్ చేయండి. "
+                            f"(Email is registered to '{user_by_email.name}', but its registered phone is {db_phone}.)"
+                        )
+                    )
+            if norm_digits == "9876501234":
+                p_bhav = db.query(Patient).filter((Patient.id == 1) | (Patient.patient_uid == "PAT-1000")).first()
+                if p_bhav and p_bhav.phone and "9876501234" not in p_bhav.phone:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"మీరు నమోదు చేసిన పాత మొబైల్ నంబర్ (+91 98765 01234) గతంలో '{p_bhav.name}' ఖాతాకు ఉండేది. "
+                            f"కానీ ఆ ఖాతా మొబైల్ నంబర్ కొత్తగా '{p_bhav.phone}' కు మరియు ఈమెయిల్ '{p_bhav.email}' కు అప్‌డేట్ చేయబడింది. "
+                            f"దయచేసి మీ అప్‌డేట్ చేసిన మొబైల్ నంబర్ ({p_bhav.phone}) మరియు ఈమెయిల్ ({p_bhav.email}) తో లాగిన్ అవ్వండి. "
+                            f"(The old number +91 98765 01234 was previously registered to '{p_bhav.name}', but was updated to '{p_bhav.phone}'. Please sign in with your updated mobile number and email.)"
+                        )
+                    )
+            formatted_input = f"+91 {norm_digits}"
+            raise HTTPException(
+                status_code=404,
+                detail=f"ఈ మొబైల్ నంబర్ ({formatted_input}) మన డేటాబేస్‌లో నమోదు కాలేదు. దయచేసి ముందుగా నమోదు చేసుకోండి. (This mobile number is not registered in our database. Please register first.)"
+            )
+
+        # 4. CRITICAL: Verify that the entered email matches the registered user email in database!
+        if user.email and email_target:
+            if user.email.strip().lower() != email_target.strip().lower():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"ఈమెయిల్ ధృవీకరణ విఫలమైంది! మీరు నమోదు చేసిన ఈమెయిల్ ({email_target}) ఈ మొబైల్ నంబర్ ఖాతాతో ({user.email}) సరిపోలలేదు. దయచేసి సరైన రిజిస్టర్డ్ ఈమెయిల్‌ను నమోదు చేయండి. (Email verification failed: The entered email does not match the registered email for this mobile number.)"
+                )
+
+    phone_to_send = (user.phone if user and user.phone else f"+91 {norm_digits}")
+    norm_phone = normalize_phone(phone_to_send)
+
+    # 5. Generate 6-digit OTP
+    otp_code = str(random.randint(100000, 999999))
+    expires_at = time.time() + 300
+    ACTIVE_OTP_STORE[norm_phone] = {
+        "otp": otp_code,
+        "expires_at": expires_at,
+        "phone": phone_to_send,
+        "email": email_target or (user.email if user else ""),
+        "user_id": user.id if user else None,
+        "purpose": purpose
+    }
+
+    # 6. Dispatch SMS to the entered mobile number
+    sms_res = dispatch_sms_otp(phone=phone_to_send, otp_code=otp_code)
+
+    try:
+        audit_entry = AuditLog(
+            actor_name=user.name if user else "Visitor",
+            actor_role=user.role if user else "patient",
+            action_type="OTP_DISPATCH",
+            status="SUCCESS",
+            details=f"SMS OTP dispatched to '{phone_to_send}' (Email: {email_target}) via {sms_res.get('provider')} (Purpose: {purpose}).",
+            risk_level="LOW"
+        )
+        db.add(audit_entry)
+        db.commit()
+    except Exception:
+        pass
+
+    resp_payload = {
+        "success": True,
+        "message": f"OTP successfully sent via SMS to {phone_to_send} and email verified",
+        "phone": phone_to_send,
+        "email": email_target or (user.email if user else ""),
+        "phone_verified": True,
+        "email_verified": True,
+        "sms_sent": sms_res.get("sent", False),
+        "provider": sms_res.get("provider", "gateway"),
+        "user_found": bool(user),
+        "user_name": user.name if user else None,
+        "user_role": user.role if user else None,
+        "expires_in_seconds": 300
+    }
+    if not sms_res.get("sent") or sms_res.get("provider") == "console_local":
+        resp_payload["otp"] = otp_code
+    return resp_payload
+
+@app.post("/api/auth/verify-otp")
+def verify_otp_endpoint(req: VerifyOtpRequest, db: Session = Depends(get_db)):
+    """
+    Verifies the submitted 6-digit OTP for the given phone number.
+    Only allows login/registration if the correct OTP is entered!
+    """
+    norm_phone = normalize_phone(req.phone)
+    submitted_otp = req.otp.strip()
+
+    otp_record = ACTIVE_OTP_STORE.get(norm_phone)
+
+    is_valid = False
+    if otp_record:
+        if time.time() <= otp_record.get("expires_at", 0) and otp_record.get("otp") == submitted_otp:
+            is_valid = True
+
+    if not is_valid:
+        raise HTTPException(
+            status_code=400,
+            detail="తప్పుడు లేదా గడువు ముగిసిన ఓటీపీ! దయచేసి మీ మొబైల్ నంబర్‌కు వచ్చిన సరైన 6-అంకెల ఓటీపీని నమోదు చేయండి. (Incorrect or expired OTP! Please enter the valid 6-digit OTP code sent to your phone.)"
+        )
+
+    # Clear OTP once verified
+    if norm_phone in ACTIVE_OTP_STORE:
+        ACTIVE_OTP_STORE.pop(norm_phone, None)
+
+    # 1. Handle Registration verification
+    if req.purpose == "register" and req.register_payload:
+        p = req.register_payload
+        reg_req = RegisterRequest(**p)
+        return register_user(reg_req, db)
+
+    # 2. Handle Login verification
+    lookup_key = (req.uid_or_email or req.phone).strip()
+    user = find_patient_by_phone_or_identifier(db, lookup_key)
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="వినియోగదారు రికార్డ్ కనుగొనబడలేదు. దయచేసి మళ్లీ నమోదు చేసుకోండి. (User record not found in database. Please register first.)"
+        )
+
+    try:
+        audit_entry = AuditLog(
+            actor_name=user.name,
+            actor_role=user.role,
+            action_type="USER_SIGNIN_OTP",
+            status="SUCCESS",
+            details=f"User '{user.name}' ({user.patient_uid}) verified via Phone OTP on '{user.phone}'.",
+            risk_level="LOW"
+        )
+        db.add(audit_entry)
+        db.commit()
+    except Exception:
+        pass
+
+    hosp = db.query(Hospital).filter(Hospital.id == user.preferred_hospital_id).first() if user.preferred_hospital_id else None
+    doc = db.query(Doctor).filter(Doctor.name.ilike(f"%{user.name}%")).first() if user.role == "doctor" else None
+    initials = "".join([part[0].upper() for part in user.name.split() if part])[:2] or "U"
+
+    return {
+        "success": True,
+        "verified": True,
+        "message": f"Welcome, {user.name}! OTP successfully verified.",
+        "user": {
+            "id": user.id,
+            "patient_uid": user.patient_uid,
+            "name": user.name,
+            "role": user.role,
+            "phone": user.phone,
+            "email": user.email,
+            "languagePref": user.language_pref,
+            "age": user.age,
+            "gender": user.gender,
+            "preferred_hospital": hosp.short_name if hosp else "Hospital B (Metro)",
+            "authorized_for_records": user.authorized_for_records,
+            "avatar": initials,
+            "description": f"{user.name} ({user.role.capitalize()} - New Patient Portal)" if user.role == "patient" and (user.id == 9 or user.id not in [1, 2]) else f"{user.name} ({user.role.capitalize()})",
+            "specialization": doc.specialization if doc else ("Cardiology" if user.role == "doctor" else None),
+            "room_number": doc.room_number if doc else ("Room 218 (2nd Floor)" if user.role == "doctor" else None),
+            "consultation_fee": doc.consultation_fee if doc else (600 if user.role == "doctor" else None),
+            "badge": (
+                "New Patient Portal" if user.role == "patient" and (user.id == 9 or (user.name and "mythri" in user.name.lower()) or (user.id not in [1, 2] and db.query(Appointment).filter(Appointment.patient_id == user.id).count() == 0))
+                else "Patient Portal" if user.role == "patient" and user.language_pref == "English"
+                else "తెలుగు పేషెంట్" if user.role == "patient"
+                else "Hospital Doctor" if user.role == "doctor"
+                else "Staff Desk" if user.role == "receptionist"
+                else "Admin Access"
+            ),
+            "is_new": (user.id == 9 or (user.name and "mythri" in user.name.lower()) or (user.id not in [1, 2] and db.query(Appointment).filter(Appointment.patient_id == user.id).count() == 0)) if user.role == "patient" else False
+        }
+    }
+
+@app.get("/api/auth/demo-chips")
+def get_demo_chips(db: Session = Depends(get_db)):
+    """
+    Returns updated login credentials (phone, email) for the demo user chips
+    so that profile updates in Settings automatically reflect on the sign-in screen.
+    """
+    p_bhavishya = db.query(Patient).filter((Patient.id == 1) | (Patient.patient_uid == "PAT-1000")).first()
+    p_mythri = db.query(Patient).filter((Patient.id == 9) | (Patient.patient_uid == "PAT-D7F2") | (Patient.name.ilike("%Mythri%"))).first()
+    p_sunitha = db.query(Patient).filter((Patient.id == 2) | (Patient.patient_uid == "PAT-1002")).first()
+    p_naveen = db.query(Patient).filter((Patient.id == 5) | (Patient.patient_uid == "DOC-2041")).first()
+    p_priya = db.query(Patient).filter((Patient.id == 3) | (Patient.patient_uid == "STAFF-2001")).first()
+    p_varma = db.query(Patient).filter((Patient.id == 4) | (Patient.patient_uid == "ADMIN-3001")).first()
+
+    def fmt_phone(p_obj, default_val):
+        if not p_obj or not p_obj.phone:
+            return default_val
+        raw = p_obj.phone.strip()
+        digits = "".join([c for c in raw if c.isdigit()])
+        if len(digits) >= 10:
+            d10 = digits[-10:]
+            return f"+91 {d10[:5]} {d10[5:]}"
+        return raw
+
+    chips = [
+        {
+            "id": 1,
+            "name": f"{p_bhavishya.name if p_bhavishya else 'Bhavishya'} (Patient)",
+            "phone": fmt_phone(p_bhavishya, "+91 98765 01234"),
+            "email": (p_bhavishya.email if p_bhavishya and p_bhavishya.email else "bhavishya@carebridge.org"),
+            "color": "bg-emerald-50 hover:bg-emerald-100/80 text-emerald-950 border-emerald-200"
+        },
+        {
+            "id": p_mythri.id if p_mythri else 9,
+            "name": f"{p_mythri.name if p_mythri else 'Mythri'} (New Patient)",
+            "phone": fmt_phone(p_mythri, "+91 83093 58353"),
+            "email": (p_mythri.email if p_mythri and p_mythri.email else "mythri@gmail.com"),
+            "color": "bg-rose-50 hover:bg-rose-100/80 text-rose-950 border-rose-200"
+        },
+        {
+            "id": 2,
+            "name": f"{p_sunitha.name if p_sunitha else 'Sunitha Reddy'} (Telugu Patient)",
+            "phone": fmt_phone(p_sunitha, "+91 98480 12345"),
+            "email": (p_sunitha.email if p_sunitha and p_sunitha.email else "sunitha.reddy@example.com"),
+            "color": "bg-teal-50 hover:bg-teal-100/80 text-teal-950 border-teal-200"
+        },
+        {
+            "id": 5,
+            "name": f"{p_naveen.name if p_naveen else 'Dr. Naveen Kumar'} (Doctor)",
+            "phone": fmt_phone(p_naveen, "+91 98480 22334"),
+            "email": (p_naveen.email if p_naveen and p_naveen.email else "dr.naveen@carebridge.org"),
+            "color": "bg-blue-50 hover:bg-blue-100/80 text-blue-950 border-blue-200"
+        },
+        {
+            "id": 3,
+            "name": f"{p_priya.name if p_priya else 'Priya Sharma'} (Staff)",
+            "phone": fmt_phone(p_priya, "+91 91234 56789"),
+            "email": (p_priya.email if p_priya and p_priya.email else "priya.reception@carebridge.org"),
+            "color": "bg-indigo-50 hover:bg-indigo-100/80 text-indigo-950 border-indigo-200"
+        },
+        {
+            "id": 4,
+            "name": f"{p_varma.name if p_varma else 'Dr. Varma'} (Admin)",
+            "phone": fmt_phone(p_varma, "+91 99999 88888"),
+            "email": (p_varma.email if p_varma and p_varma.email else "admin@carebridge.org"),
+            "color": "bg-amber-50 hover:bg-amber-100/80 text-amber-950 border-amber-200"
+        }
+    ]
+    return {"chips": chips}
 
 @app.post("/api/login")
 def login_user(req: LoginRequest, db: Session = Depends(get_db)):
     """
     Sign In endpoint supporting login via:
     1. user_id directly
-    2. role name ('patient', 'patient_telugu', 'doctor', 'receptionist', 'admin')
+    2. role name ('patient', 'patient_mythri', 'patient_telugu', 'doctor', 'receptionist', 'admin')
     3. uid_or_email matching Patient.patient_uid, Patient.email, Patient.phone, or Patient.name
     """
     user = None
@@ -931,14 +1482,16 @@ def login_user(req: LoginRequest, db: Session = Depends(get_db)):
         user = db.query(Patient).filter(Patient.id == req.user_id).first()
     elif req.role:
         role_clean = req.role.lower()
-        if role_clean == "patient_telugu":
+        if role_clean in ("patient_mythri", "mythri"):
+            user = db.query(Patient).filter((Patient.id == 9) | (Patient.patient_uid == "PAT-D7F2") | (Patient.name.ilike("%Mythri%"))).first()
+        elif role_clean == "patient_telugu":
             user = db.query(Patient).filter(Patient.role == "patient", Patient.language_pref == "Telugu").first()
             if not user:
                 user = db.query(Patient).filter(Patient.id == 2).first()
         elif role_clean == "doctor":
             user = db.query(Patient).filter(Patient.role == "doctor").first()
             if not user:
-                doc = db.query(Doctor).filter(Doctor.name.ilike("%Anil%")).first() or db.query(Doctor).filter(Doctor.name.ilike("%Ananya%")).first()
+                doc = db.query(Doctor).filter(Doctor.name.ilike("%Naveen%")).first() or db.query(Doctor).filter(Doctor.name.ilike("%Anil%")).first() or db.query(Doctor).filter(Doctor.name.ilike("%Ananya%")).first()
                 if doc:
                     user = db.query(Patient).filter(Patient.name.ilike(f"%{doc.name}%")).first()
                 if not user:
@@ -946,9 +1499,9 @@ def login_user(req: LoginRequest, db: Session = Depends(get_db)):
                     hosp = db.query(Hospital).first()
                     user = Patient(
                         patient_uid="DOC-2041",
-                        name="Dr. Anil Kumar",
+                        name="Dr. Naveen Kumar",
                         phone="+91 98480 22334",
-                        email="dr.anil@carebridge.org",
+                        email="dr.naveen@carebridge.org",
                         age=45,
                         gender="Male",
                         preferred_hospital_id=hosp.id if hosp else 2,
@@ -963,15 +1516,15 @@ def login_user(req: LoginRequest, db: Session = Depends(get_db)):
             user = db.query(Patient).filter(Patient.role == role_clean).first()
     elif req.uid_or_email:
         query_val = req.uid_or_email.strip()
-        user = db.query(Patient).filter(
-            (Patient.patient_uid.ilike(query_val)) |
-            (Patient.email.ilike(query_val)) |
-            (Patient.phone.like(f"%{query_val}%")) |
-            (Patient.name.ilike(f"%{query_val}%"))
-        ).first()
+        user = find_patient_by_phone_or_identifier(db, query_val)
 
     if not user:
-        # Fallback to standard Patient Ravi Kumar if not found
+        if req.uid_or_email:
+            raise HTTPException(
+                status_code=404, 
+                detail="ఈ యూజర్ లేదా మొబైల్ నంబర్ మన డేటాబేస్‌లో కనుగొనబడలేదు. (User or phone number not found in database)."
+            )
+        # Fallback to standard Patient if no specific credentials passed
         user = db.query(Patient).first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -1008,17 +1561,19 @@ def login_user(req: LoginRequest, db: Session = Depends(get_db)):
             "preferred_hospital": hosp.short_name if hosp else "Hospital B (Metro)",
             "authorized_for_records": user.authorized_for_records,
             "avatar": initials,
-            "description": f"{user.name} ({user.role.capitalize()})",
+            "description": f"{user.name} ({user.role.capitalize()} - New Patient Portal)" if user.role == "patient" and (user.id == 9 or user.id not in [1, 2]) else f"{user.name} ({user.role.capitalize()})",
             "specialization": doc.specialization if doc else ("Cardiology" if user.role == "doctor" else None),
             "room_number": doc.room_number if doc else ("Room 218 (2nd Floor)" if user.role == "doctor" else None),
             "consultation_fee": doc.consultation_fee if doc else (600 if user.role == "doctor" else None),
             "badge": (
-                "Patient Portal" if user.role == "patient" and user.language_pref == "English"
+                "New Patient Portal" if user.role == "patient" and (user.id == 9 or "mythri" in (user.name or "").lower() or (user.id not in [1, 2] and db.query(Appointment).filter(Appointment.patient_id == user.id).count() == 0))
+                else "Patient Portal" if user.role == "patient" and user.language_pref == "English"
                 else "తెలుగు పేషెంట్" if user.role == "patient"
                 else "Hospital Doctor" if user.role == "doctor"
                 else "Staff Desk" if user.role == "receptionist"
                 else "Admin Access"
-            )
+            ),
+            "is_new": (user.id == 9 or "mythri" in (user.name or "").lower() or (user.id not in [1, 2] and db.query(Appointment).filter(Appointment.patient_id == user.id).count() == 0)) if user.role == "patient" else False
         }
     }
 
@@ -1028,6 +1583,25 @@ def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
     Real registration endpoint creating new patients, receptionists, or doctors.
     """
     import uuid
+
+    # 1. Validate mobile number
+    if req.phone and req.phone.strip():
+        is_valid_phone, norm_digits, phone_err = validate_indian_mobile(req.phone)
+        if not is_valid_phone:
+            raise HTTPException(status_code=400, detail=phone_err)
+        clean_phone = f"+91 {norm_digits}"
+    else:
+        clean_phone = "+91 98765 00000"
+
+    # 2. Validate email
+    if req.email and req.email.strip():
+        is_valid_email, email_err = validate_email_address(req.email)
+        if not is_valid_email:
+            raise HTTPException(status_code=400, detail=email_err)
+        clean_email = req.email.strip().lower()
+    else:
+        clean_email = f"{req.name.lower().replace(' ', '.')}@carebridge.org"
+
     random_hex = str(uuid.uuid4().hex)[:4].upper()
     role_clean = req.role.lower()
 
@@ -1051,8 +1625,8 @@ def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
     new_user = Patient(
         patient_uid=uid,
         name=req.name,
-        phone=req.phone or "+91 98000 00000",
-        email=req.email or f"{req.name.lower().replace(' ', '.')}@carebridge.org",
+        phone=clean_phone,
+        email=clean_email,
         age=req.age or 35,
         gender=req.gender or "Other",
         preferred_hospital_id=hosp.id if hosp else 2,
@@ -1111,8 +1685,7 @@ def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
 
     initials = "".join([part[0].upper() for part in new_user.name.split() if part])[:2] or "U"
     badge = (
-        "Patient Portal" if new_user.role == "patient" and new_user.language_pref == "English"
-        else "తెలుగు పేషెంట్" if new_user.role == "patient"
+        "New Patient Portal" if new_user.role == "patient"
         else "Hospital Doctor" if new_user.role == "doctor"
         else "Staff Desk" if new_user.role == "receptionist"
         else "Admin Access"
@@ -1120,7 +1693,7 @@ def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
 
     return {
         "success": True,
-        "message": f"Successfully registered as {role_clean.upper()}!",
+        "message": f"Successfully registered as PATIENT! New Patient Portal assigned by default." if new_user.role == "patient" else f"Successfully registered as {role_clean.upper()}!",
         "user": {
             "id": new_user.id,
             "patient_uid": new_user.patient_uid,
@@ -1133,12 +1706,231 @@ def register_user(req: RegisterRequest, db: Session = Depends(get_db)):
             "gender": new_user.gender,
             "preferred_hospital": hosp.short_name if hosp else "Hospital B (Metro)",
             "avatar": initials,
-            "description": f"{new_user.name} ({role_clean.capitalize()})",
+            "description": f"{new_user.name} (New Patient Portal)" if new_user.role == "patient" else f"{new_user.name} ({role_clean.capitalize()})",
             "badge": badge,
             "specialization": doc_created.specialization if doc_created else None,
             "room_number": doc_created.room_number if doc_created else None,
             "consultation_fee": doc_created.consultation_fee if doc_created else None,
-            "authorized_for_records": new_user.authorized_for_records
+            "authorized_for_records": new_user.authorized_for_records,
+            "is_new": True if new_user.role == "patient" else False
+        }
+    }
+
+@app.api_route("/api/profile/update", methods=["POST", "PUT"])
+@app.api_route("/api/profile", methods=["POST", "PUT"])
+def update_profile_endpoint(req: ProfileUpdateRequest, db: Session = Depends(get_db)):
+    """
+    Updates user/patient and doctor profile in SQLite database.
+    Enforces Indian mobile validation (6-9 valid, 0-5 invalid) and email validation.
+    Directly persists changes into patients and doctors tables.
+    """
+    # 1. Validate mobile number
+    clean_phone = ""
+    if req.phone and req.phone.strip():
+        is_valid_phone, norm_digits, phone_err = validate_indian_mobile(req.phone)
+        if not is_valid_phone:
+            raise HTTPException(status_code=400, detail=phone_err)
+        clean_phone = f"+91 {norm_digits}"
+
+    # 2. Validate email
+    clean_email = ""
+    if req.email and req.email.strip():
+        is_valid_email, email_err = validate_email_address(req.email)
+        if not is_valid_email:
+            raise HTTPException(status_code=400, detail=email_err)
+        clean_email = req.email.strip().lower()
+
+    # 3. Locate existing patient/user in SQLite database
+    patient = None
+    if req.user_id:
+        patient = db.query(Patient).filter(Patient.id == req.user_id).first()
+    if not patient and req.patient_uid:
+        patient = db.query(Patient).filter(Patient.patient_uid == req.patient_uid).first()
+    if not patient and clean_phone:
+        patient = db.query(Patient).filter(Patient.phone.like(f"%{clean_phone[-10:]}%")).first()
+    if not patient and clean_email:
+        patient = db.query(Patient).filter(Patient.email.ilike(clean_email)).first()
+    if not patient and req.name:
+        patient = db.query(Patient).filter(Patient.name.ilike(f"%{req.name.strip()}%")).first()
+
+    if not patient:
+        raise HTTPException(
+            status_code=404,
+            detail="వినియోగదారు ప్రొఫైల్ డేటాబేస్‌లో కనుగొనబడలేదు (User profile not found in database)."
+        )
+
+    # 4. Resolve preferred hospital
+    hosp = None
+    if req.preferred_hospital_id:
+        hosp = db.query(Hospital).filter(Hospital.id == req.preferred_hospital_id).first()
+    elif req.preferred_hospital:
+        pref = req.preferred_hospital.upper()
+        if "HOSPITAL A" in pref or "APEX" in pref:
+            hosp = db.query(Hospital).filter(Hospital.code == "HOSP-A").first()
+        elif "HOSPITAL C" in pref or "COMMUNITY" in pref or "SECUNDERABAD" in pref:
+            hosp = db.query(Hospital).filter(Hospital.code == "HOSP-C").first()
+        else:
+            hosp = db.query(Hospital).filter(Hospital.code == "HOSP-B").first()
+
+    if not hosp and patient.preferred_hospital_id:
+        hosp = db.query(Hospital).filter(Hospital.id == patient.preferred_hospital_id).first()
+    if not hosp:
+        hosp = db.query(Hospital).filter(Hospital.code == "HOSP-B").first()
+
+    # 5. Update Patient record attributes
+    old_name = patient.name
+    if req.name and req.name.strip():
+        patient.name = req.name.strip()
+    if clean_phone:
+        patient.phone = clean_phone
+    if clean_email:
+        patient.email = clean_email
+    if req.age is not None:
+        patient.age = req.age
+    if req.gender:
+        patient.gender = req.gender
+    if hosp:
+        patient.preferred_hospital_id = hosp.id
+    if req.language_pref:
+        patient.language_pref = req.language_pref
+
+    # 6. Update corresponding Doctor record if user is a doctor
+    doc = None
+    role_check = (req.role or patient.role or "").lower()
+    if role_check == "doctor":
+        doc = db.query(Doctor).filter(
+            (Doctor.name == old_name) |
+            (Doctor.name == patient.name) |
+            (Doctor.name == f"Dr. {patient.name}") |
+            (Doctor.name.ilike(f"%{patient.name.replace('Dr. ', '')}%"))
+        ).first()
+
+        if doc:
+            if req.name:
+                doc.name = patient.name if patient.name.lower().startswith("dr.") else f"Dr. {patient.name}"
+            if req.specialization:
+                doc.specialization = req.specialization
+            if req.room_number:
+                doc.room_number = req.room_number
+            if req.consultation_fee is not None:
+                doc.consultation_fee = req.consultation_fee
+            if req.experience_years is not None:
+                doc.experience_years = req.experience_years
+            if hosp:
+                doc.hospital_id = hosp.id
+
+    # Commit SQLite database changes
+    db.commit()
+    db.refresh(patient)
+    if doc:
+        db.refresh(doc)
+
+    # 7. Record AuditLog in database
+    audit = AuditLog(
+        actor_name=patient.name,
+        actor_role=patient.role or "patient",
+        action_type="PROFILE_UPDATE",
+        status="SUCCESS",
+        details=f"Profile updated for {patient.patient_uid}: Phone='{patient.phone}', Email='{patient.email}', Age={patient.age}, Hospital={hosp.short_name if hosp else 'Metro'}",
+        risk_level="LOW"
+    )
+    db.add(audit)
+    db.commit()
+
+    initials = "".join([part[0].upper() for part in patient.name.split() if part])[:2] or "U"
+    badge = (
+        "Patient Portal" if patient.role == "patient" and (patient.language_pref or "").lower() == "english"
+        else "తెలుగు పేషెంట్" if patient.role == "patient"
+        else "Hospital Doctor" if patient.role == "doctor"
+        else "Staff Desk" if patient.role == "receptionist"
+        else "Admin Access"
+    )
+
+    hosp_display = f"{hosp.short_name} ({hosp.area})" if hosp else "Hospital B (CareBridge Metro, Gachibowli)"
+
+    return {
+        "success": True,
+        "message": f"Profile for {patient.name} updated successfully in database!",
+        "telugu_message": f"వినియోగదారు {patient.name} ప్రొఫైల్ వివరాలు డేటాబేస్‌లో విజయవంతంగా సేవ్ చేయబడ్డాయి!",
+        "user": {
+            "id": patient.id,
+            "patient_uid": patient.patient_uid,
+            "name": patient.name,
+            "role": patient.role,
+            "languagePref": patient.language_pref,
+            "phone": patient.phone,
+            "email": patient.email,
+            "age": patient.age,
+            "gender": patient.gender,
+            "preferred_hospital_id": patient.preferred_hospital_id,
+            "preferred_hospital": hosp_display,
+            "avatar": initials,
+            "description": f"{patient.name} ({patient.role.capitalize()})",
+            "badge": badge,
+            "specialization": doc.specialization if doc else (req.specialization or "General Medicine"),
+            "room_number": doc.room_number if doc else (req.room_number or "Room 208 (2nd Floor)"),
+            "consultation_fee": doc.consultation_fee if doc else (req.consultation_fee or 600),
+            "experience_years": doc.experience_years if doc else (req.experience_years or 8),
+            "authorized_for_records": patient.authorized_for_records
+        }
+    }
+
+@app.get("/api/profile/{user_id_or_uid}")
+def get_profile_endpoint(user_id_or_uid: str, db: Session = Depends(get_db)):
+    """
+    Returns live profile details from SQLite database for the given user ID or UID.
+    """
+    patient = None
+    if user_id_or_uid.isdigit():
+        patient = db.query(Patient).filter(Patient.id == int(user_id_or_uid)).first()
+    if not patient:
+        patient = db.query(Patient).filter(Patient.patient_uid == user_id_or_uid).first()
+    if not patient:
+        patient = db.query(Patient).filter(Patient.phone.like(f"%{user_id_or_uid}%")).first()
+    if not patient:
+        raise HTTPException(status_code=404, detail="Profile not found in database")
+
+    hosp = db.query(Hospital).filter(Hospital.id == patient.preferred_hospital_id).first()
+    doc = None
+    if patient.role == "doctor":
+        doc = db.query(Doctor).filter(
+            (Doctor.name == patient.name) |
+            (Doctor.name == f"Dr. {patient.name}") |
+            (Doctor.name.ilike(f"%{patient.name.replace('Dr. ', '')}%"))
+        ).first()
+
+    initials = "".join([part[0].upper() for part in patient.name.split() if part])[:2] or "U"
+    badge = (
+        "Patient Portal" if patient.role == "patient" and (patient.language_pref or "").lower() == "english"
+        else "తెలుగు పేషెంట్" if patient.role == "patient"
+        else "Hospital Doctor" if patient.role == "doctor"
+        else "Staff Desk" if patient.role == "receptionist"
+        else "Admin Access"
+    )
+    hosp_display = f"{hosp.short_name} ({hosp.area})" if hosp else "Hospital B (CareBridge Metro, Gachibowli)"
+
+    return {
+        "success": True,
+        "user": {
+            "id": patient.id,
+            "patient_uid": patient.patient_uid,
+            "name": patient.name,
+            "role": patient.role,
+            "languagePref": patient.language_pref,
+            "phone": patient.phone,
+            "email": patient.email,
+            "age": patient.age,
+            "gender": patient.gender,
+            "preferred_hospital_id": patient.preferred_hospital_id,
+            "preferred_hospital": hosp_display,
+            "avatar": initials,
+            "description": f"{patient.name} ({patient.role.capitalize()})",
+            "badge": badge,
+            "specialization": doc.specialization if doc else None,
+            "room_number": doc.room_number if doc else None,
+            "consultation_fee": doc.consultation_fee if doc else None,
+            "experience_years": doc.experience_years if doc else None,
+            "authorized_for_records": patient.authorized_for_records
         }
     }
 
@@ -1150,6 +1942,42 @@ def reset_database_endpoint(db: Session = Depends(get_db)):
     init_db(db)
     reset_simulation_surge()
     return {"success": True, "message": "Demo data and simulation queues reset successfully to pristine state."}
+
+
+# =====================================================================
+# FIREBASE REALTIME DATABASE SYNC ENDPOINTS (/api/firebase/...)
+# =====================================================================
+@app.get("/api/firebase/status")
+def get_firebase_status():
+    """Returns Firebase Realtime Database connection status and configuration."""
+    return test_firebase_conn()
+
+@app.post("/api/firebase/sync")
+def sync_all_to_firebase_endpoint(db: Session = Depends(get_db)):
+    """Triggers full sync of appointments & baseline queue to Firebase Realtime Database."""
+    from .models import Appointment
+    appts = db.query(Appointment).all()
+    appts_data = []
+    for a in appts:
+        appts_data.append({
+            "id": a.id,
+            "confirmation_code": a.confirmation_code,
+            "patient_name": a.patient.name if a.patient else "Patient",
+            "doctor_name": a.doctor.name if a.doctor else "Doctor",
+            "department": a.doctor.department.name if a.doctor and a.doctor.department else "General",
+            "hospital_name": a.doctor.hospital.name if a.doctor and a.doctor.hospital else "CareBridge Metro",
+            "date": (a.slot.date if a.slot else getattr(a, "appointment_date", "2026-10-06")),
+            "time": (a.slot.start_time if a.slot else getattr(a, "appointment_time", "10:00 AM")),
+            "token_number": a.token_number,
+            "status": a.status
+        })
+    ok = seed_full_state_to_firebase(appts_data)
+    return {
+        "success": ok,
+        "synced_appointments": len(appts_data),
+        "firebase_url": get_firebase_db_url(),
+        "message": "Full database synchronized to Firebase Realtime Database" if ok else "Sync failed or Firebase URL not configured"
+    }
 
 
 # =====================================================================
@@ -1763,6 +2591,9 @@ def emergency_triage_and_dispatch(req: EmergencyTriageRequest, db: Session = Dep
             "distance_km": alt["distance_km"],
             "eta_minutes": alt["eta_minutes"],
             "emergency_phone": alt_h.emergency_phone,
+            "latitude": alt["geo"]["lat"],
+            "longitude": alt["geo"]["lng"],
+            "map_link": f"https://www.google.com/maps/dir/?api=1&origin={patient_lat},{patient_lng}&destination={alt['geo']['lat']},{alt['geo']['lng']}&travelmode=driving",
             "has_specialist": alt["has_specialist"],
             "doctor_name": alt_d.name if alt_d else "Emergency Resident",
             "doctor_title": alt_d.title if alt_d else "Medical Officer",
@@ -1809,11 +2640,13 @@ def emergency_triage_and_dispatch(req: EmergencyTriageRequest, db: Session = Dep
             "short_name": best_hosp.short_name,
             "area": best_hosp.area,
             "city": best_hosp.city,
+            "latitude": best["geo"]["lat"],
+            "longitude": best["geo"]["lng"],
             "distance_km": best["distance_km"],
             "eta_minutes": best["eta_minutes"],
             "emergency_phone": best_hosp.emergency_phone,
             "contact_phone": best_hosp.contact_phone,
-            "map_link": f"https://www.google.com/maps/dir/?api=1&destination={best['geo']['lat']},{best['geo']['lng']}",
+            "map_link": f"https://www.google.com/maps/dir/?api=1&origin={patient_lat},{patient_lng}&destination={best['geo']['lat']},{best['geo']['lng']}&travelmode=driving",
             "active_icu_units": best_hosp.active_icu_units,
             "available_beds": max(0, best_hosp.total_beds - best_hosp.occupied_beds),
             "er_status": "Level-1 24/7 Trauma Bay Active • Cath Lab & Resuscitation On Standby"

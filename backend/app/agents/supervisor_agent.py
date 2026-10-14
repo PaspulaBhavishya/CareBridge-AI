@@ -810,7 +810,7 @@ class SupervisorAgent:
             existing_appt = existing_appts[0]
 
         if is_dup_test and existing_appt:
-            dup_doc = existing_appt.doctor.name if (existing_appt and existing_appt.doctor) else "Dr. Anil Kumar"
+            dup_doc = existing_appt.doctor.name if (existing_appt and existing_appt.doctor) else "Dr. Naveen Kumar"
             dup_tok = existing_appt.token_number or "C-24"
             dup_time = existing_appt.slot.start_time if (existing_appt and existing_appt.slot) else "10:30 AM"
             dup_date = existing_appt.slot.date if (existing_appt and existing_appt.slot) else "16 Sep 2026"
@@ -881,7 +881,7 @@ class SupervisorAgent:
             rec_slot = {
                 "slot_id": 101,
                 "doctor_id": 10,
-                "doctor_name": "Dr. Anil Kumar",
+                "doctor_name": "Dr. Naveen Kumar",
                 "specialization": "Cardiology (Interventional Cardiologist)",
                 "department": "Cardiology",
                 "hospital_name": "CareBridge Heart Center (Guntur OPD Node)",
@@ -900,7 +900,7 @@ class SupervisorAgent:
 
             why_recommended = [
                 "25-minute estimated waiting time (Lowest in Guntur network)",
-                "Telugu-speaking support available (Dr. Anil Kumar speaks fluent Telugu)",
+                "Telugu-speaking support available (Dr. Naveen Kumar speaks fluent Telugu)",
                 "Cardiologist available today & tomorrow on active OPD shift",
                 "Preferred time slot matched (10:30 AM)",
                 "High doctor availability (95% shift attendance, 4.5 km distance)"
@@ -978,13 +978,13 @@ class SupervisorAgent:
                     agent_name="Scheduling Agent",
                     tool_name="check_slots",
                     status="completed",
-                    summary="Check slots: Found Dr. Anil Kumar (Cardiology) at 10:30 AM tomorrow (₹500 fee, 25m wait).",
+                    summary="Check slots: Found Dr. Naveen Kumar (Cardiology) at 10:30 AM tomorrow (₹500 fee, 25m wait).",
                     risk_level="MEDIUM",
                     latency_ms=3.9,
-                    input_summary="Doctor: Dr. Anil Kumar, Dept: Cardiology, Slot: 10:30 AM",
+                    input_summary="Doctor: Dr. Naveen Kumar, Dept: Cardiology, Slot: 10:30 AM",
                     output_summary="Slot ID #101 verified available (Room 102, Ground Floor)",
                     reasons=[
-                        "Verified physician roster: Dr. Anil Kumar on active duty, fluent in Telugu",
+                        "Verified physician roster: Dr. Naveen Kumar on active duty, fluent in Telugu",
                         "Slot confirmed available with temporary hold for patient decision"
                     ]
                 ),
@@ -995,7 +995,7 @@ class SupervisorAgent:
                     summary="Ask approval: High-risk booking action paused behind Human-in-the-Loop card.",
                     risk_level="HIGH",
                     latency_ms=1.8,
-                    input_summary="Booking Dr. Anil Kumar (Cardiology) at 10:30 AM",
+                    input_summary="Booking Dr. Naveen Kumar (Cardiology) at 10:30 AM",
                     output_summary="State: WAITING_FOR_APPROVAL (Zero database commit without patient consent)",
                     reasons=[
                         "Approval-aware agent policy: Sensitive medical booking actions require human consent",
@@ -1195,13 +1195,13 @@ class SupervisorAgent:
             doctor_name = payload.get("doctor_name", "")
 
             # Live Guntur Cardiologist Scenario handling
-            if doctor_name == "Dr. Anil Kumar" or slot_id == 101:
+            if doctor_name in ["Dr. Naveen Kumar", "Dr. Anil Kumar"] or slot_id == 101:
                 booking_result = {
                     "success": True,
                     "appointment_id": 9901,
                     "confirmation_code": "CB-2026-CARD24",
                     "patient_name": actor_name or "Bhavishya (PAT-1000)",
-                    "doctor_name": "Dr. Anil Kumar",
+                    "doctor_name": "Dr. Naveen Kumar",
                     "specialization": "Cardiology (Interventional Cardiologist)",
                     "hospital_name": "CareBridge Heart Center (Guntur OPD Node)",
                     "room_number": "Room 102 (Cardiology OPD, Ground Floor)",
@@ -1211,7 +1211,7 @@ class SupervisorAgent:
                     "consultation_fee": 500,
                     "token_number": "C-24",
                     "queue_status": "Confirmed • 3 patients ahead",
-                    "message": "Appointment successfully booked with Dr. Anil Kumar."
+                    "message": "Appointment successfully booked with Dr. Naveen Kumar."
                 }
                 pass_data = {
                     "success": True,
@@ -1219,7 +1219,7 @@ class SupervisorAgent:
                     "token_number": "C-24",
                     "patient_name": actor_name or "Bhavishya (PAT-1000)",
                     "patient_uid": "PAT-1000",
-                    "doctor_name": "Dr. Anil Kumar",
+                    "doctor_name": "Dr. Naveen Kumar",
                     "department": "Cardiology",
                     "room_number": "Room 102 (Cardiology OPD, Ground Floor)",
                     "hospital_name": "CareBridge Heart Center (Guntur OPD Node)",
@@ -1236,7 +1236,7 @@ class SupervisorAgent:
                     recipient_phone="+91 98480 22334",
                     patient_name=booking_result["patient_name"],
                     alert_type="APPOINTMENT_CONFIRMED",
-                    message_en="CareBridge AI: Your consultation with Dr. Anil Kumar is confirmed for 10:30 AM tomorrow. Token #C-24."
+                    message_en="CareBridge AI: Your consultation with Dr. Naveen Kumar is confirmed for 10:30 AM tomorrow. Token #C-24."
                 )
                 timeline.append(self._create_timeline_step(
                     agent_name="Scheduling Agent",
@@ -1245,7 +1245,7 @@ class SupervisorAgent:
                     summary="Atomic appointment booked in Guntur database. Code: CB-2026-CARD24",
                     risk_level="LOW",
                     latency_ms=18.0,
-                    output_summary="Confirmed: Dr. Anil Kumar, Room 102, 10:30 AM"
+                    output_summary="Confirmed: Dr. Naveen Kumar, Room 102, 10:30 AM"
                 ))
                 timeline.append(self._create_timeline_step(
                     agent_name="Queue Management Agent",

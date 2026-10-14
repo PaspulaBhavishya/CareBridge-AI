@@ -3,11 +3,13 @@ import {
   Users, Clock, Calendar, AlertTriangle, 
   Pill, FlaskConical, Stethoscope, ChevronRight, ChevronLeft,
   Sparkles, Bot, Send, 
-  Activity, ClipboardList, FolderHeart, HeartPulse,
-  CreditCard, MessageSquare, CheckSquare, ShieldCheck
+  Activity, ClipboardList, HeartPulse,
+  CreditCard, MessageSquare, CheckSquare, ShieldCheck, Download, Brain,
+  CheckCircle2
 } from 'lucide-react';
 import type { UserProfile, AppointmentRecord } from '../types';
 import { getTranslation } from '../utils/translations';
+import { ExportPatientVisitsModal } from './ExportPatientVisitsModal';
 
 interface MedicalErpDashboardProps {
   currentProfile: UserProfile;
@@ -20,7 +22,7 @@ interface MedicalErpDashboardProps {
 
 export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
   currentProfile,
-  appointments: _appointments,
+  appointments = [],
   onNavigateToTab,
   onSendMessage,
   onOpenPass: _onOpenPass,
@@ -32,6 +34,7 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
   const [aiSummaryModal, setAiSummaryModal] = useState(false);
   const [summaryGenerating, setSummaryGenerating] = useState(false);
   const [generatedSummary, setGeneratedSummary] = useState<string | null>(null);
+  const [exportModalOpen, setExportModalOpen] = useState<boolean>(false);
 
   // Selected date in calendar widget
   const [selectedDay, setSelectedDay] = useState<number>(20);
@@ -41,28 +44,75 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
     onNavigateToTab('chat');
   };
 
-  const handleGenerateAiSummary = () => {
-    setAiSummaryModal(true);
-    setSummaryGenerating(true);
-    setGeneratedSummary(null);
-    setTimeout(() => {
-      setSummaryGenerating(false);
-      setGeneratedSummary(
-        `${displayName}, your morning OPD at CareBridge Heart Center Guntur has 42 queued patients. SmartFlow has optimized waiting time to an average of 18 minutes. 3 patients require acute attention (Rakesh Patel - High BP / Diabetic). 18 prescriptions and 12 lab reports are pending review. Slot #101 at 10:30 AM is reserved for Telugu cardiologist consultation.`
-      );
-    }, 1200);
-  };
-
   const role = currentProfile.role;
+
+  // Filter appointments specifically for this patient
+  const patientAppointments = (appointments || []).filter((a) => {
+    if (a.patient_id && currentProfile.id && a.patient_id === currentProfile.id) return true;
+    if (a.patient_name && currentProfile.name) {
+      const pName = currentProfile.name.toLowerCase().trim();
+      const aName = a.patient_name.toLowerCase().trim();
+      return aName.includes(pName) || pName.includes(aName);
+    }
+    return false;
+  });
+
+  const isPreSeededPatient = 
+    !currentProfile.is_new &&
+    (currentProfile.id === 1 || currentProfile.id === 2 ||
+     (currentProfile.name && (
+       currentProfile.name.toLowerCase().includes('bhavishya') ||
+       currentProfile.name.toLowerCase().includes('sunitha')
+     )));
+
+  // A patient is in "New Portal" clean mode if they are marked is_new or have 0 appointments and are not a pre-seeded patient with records
+  const isNewPortal = 
+    role === 'patient' && (
+      currentProfile.is_new === true ||
+      currentProfile.badge === 'New Patient Portal' ||
+      currentProfile.id === 9 ||
+      (currentProfile.name && currentProfile.name.toLowerCase().includes('mythri')) ||
+      (patientAppointments.length === 0 && !isPreSeededPatient)
+    );
 
   // Format greeting name properly:
   const displayName = (role === 'patient' || role === 'receptionist')
     ? currentProfile.name.replace(/^Dr\.\s*/i, '')
     : (currentProfile.name.startsWith('Dr.') ? currentProfile.name : `Dr. ${currentProfile.name}`);
 
+  const handleGenerateAiSummary = () => {
+    setAiSummaryModal(true);
+    setSummaryGenerating(true);
+    setGeneratedSummary(null);
+    setTimeout(() => {
+      setSummaryGenerating(false);
+      if (role === 'patient') {
+        if (isNewPortal) {
+          setGeneratedSummary(
+            isTe
+              ? `${displayName}, మీ కేర్‌బ్రిడ్జ్ పర్సనల్ హెల్త్ పోర్టల్ సిద్ధంగా ఉంది. మీకు ప్రస్తుతం రాబోయే అపాయింట్‌మెంట్‌లు, యాక్టివ్ ప్రిస్క్రిప్షన్‌లు, ల్యాబ్ రిపోర్ట్‌లు లేదా లైవ్ ఓపీడీ టోకెన్లు లేవు. మా AI అసిస్టెంట్ ద్వారా తక్కువ వేచి ఉండే సమయంతో మీ మొదటి అపాయింట్‌మెంట్‌ను బుక్ చేసుకోవచ్చు.`
+              : `${displayName}, welcome to your CareBridge Health Portal. Your account is newly registered. You currently have no upcoming appointments, active prescriptions, lab reports, or live OPD tokens. You can book your first consultation anytime with minimal waiting time.`
+          );
+        } else {
+          setGeneratedSummary(
+            isTe
+              ? `${displayName}, మీ అపాయింట్‌మెంట్ రేపు ఉదయం 10:30 కు డాక్టర్ నవీన్ కుమార్‌తో నిర్ధారించబడింది (టోకెన్ #C-24). 2 క్రియాశీల ప్రిస్క్రిప్షన్లు అందుబాటులో ఉన్నాయి.`
+              : `${displayName}, your appointment is confirmed with Dr. Naveen Kumar for tomorrow 10:30 AM (Token #C-24). 2 active prescriptions on file.`
+          );
+        }
+      } else {
+        setGeneratedSummary(
+          `${displayName}, your morning OPD at CareBridge Heart Center Guntur has 42 queued patients. SmartFlow has optimized waiting time to an average of 18 minutes. 3 patients require acute attention (Rakesh Patel - High BP / Diabetic). 18 prescriptions and 12 lab reports are pending review. Slot #101 at 10:30 AM is reserved for Telugu cardiologist consultation.`
+        );
+      }
+    }, 1200);
+  };
+
   const roleGreetingSubtitle = 
     role === 'patient'
-      ? `${t.role_sub_patient} • ID: ${currentProfile.patient_uid || 'PAT-1000'}`
+      ? (isNewPortal 
+          ? (isTe ? `కొత్త పేషెంట్ పోర్టల్ • ID: ${currentProfile.patient_uid || 'PAT-NEW'}` : `New Patient Health Portal • ID: ${currentProfile.patient_uid || 'PAT-NEW'}`)
+          : `${t.role_sub_patient} • ID: ${currentProfile.patient_uid || 'PAT-1000'}`)
       : role === 'receptionist'
       ? t.role_sub_receptionist
       : role === 'admin'
@@ -71,7 +121,11 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
 
   const roleDescription = 
     role === 'patient'
-      ? t.role_desc_patient
+      ? (isNewPortal
+          ? (isTe 
+              ? 'కేర్‌బ్రిడ్జ్ పర్సనల్ హెల్త్ పోర్టల్‌కి స్వాగతం. మీ ఖాతా కొత్తగా నమోదైంది. మీకు ప్రస్తుతం రాబోయే అపాయింట్‌మెంట్‌లు, యాక్టివ్ ప్రిస్క్రిప్షన్‌లు, ల్యాబ్ రిపోర్ట్‌లు లేదా లైవ్ టోకెన్‌లు లేవు. మొదటి సంప్రదింపు కోసం క్రింది బటన్ నొక్కండి.'
+              : 'Welcome to your personal health portal. Your account is newly created. You currently have no upcoming appointments, active prescriptions, lab reports, or live queue tokens. Get started by booking your first doctor consultation.')
+          : t.role_desc_patient)
       : role === 'receptionist'
       ? t.role_desc_receptionist
       : role === 'admin'
@@ -82,16 +136,78 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
   const roleKpis = (() => {
     switch (role) {
       case 'patient':
+        if (isNewPortal) {
+          // Fresh New Patient Portal: No upcoming appointments, active prescriptions, lab reports, or live tokens
+          return [
+            {
+              title: isTe ? "తొలి అపాయింట్‌మెంట్" : "Book Consultation",
+              value: isTe ? "స్లాట్ ఎంచుకోండి" : "Select Slot",
+              change: isTe ? "AI స్మార్ట్‌ఫ్లో తక్కువ వెయిటింగ్ →" : "AI SmartFlow lowest wait →",
+              icon: Calendar,
+              iconBg: "bg-blue-50 text-blue-600",
+              pillBg: "text-blue-600",
+              clickable: true,
+              onClick: () => onNavigateToTab('chat')
+            },
+            {
+              title: isTe ? "వైద్యుల శోధన" : "Find Doctors & OPDs",
+              value: isTe ? "స్పెషలిస్ట్‌లు" : "Specialists",
+              change: isTe ? "కార్డియాలజీ & జనరల్ మెడిసిన్ →" : "Cardiology & General Med →",
+              icon: Stethoscope,
+              iconBg: "bg-cyan-50 text-cyan-600",
+              pillBg: "text-cyan-600",
+              clickable: true,
+              onClick: () => onNavigateToTab('chat')
+            },
+            {
+              title: isTe ? "మెడికల్ రిపోర్ట్ స్కానర్" : "Report OCR Scanner",
+              value: isTe ? "OCR స్కానర్" : "Upload & Scan",
+              change: isTe ? "పాత ల్యాబ్ రిపోర్టులు స్కాన్ చేయండి →" : "Upload past test reports →",
+              icon: FlaskConical,
+              iconBg: "bg-emerald-50 text-emerald-600",
+              pillBg: "text-emerald-600",
+              clickable: true,
+              onClick: () => onNavigateToTab('scanner')
+            },
+            {
+              title: isTe ? "డిజిటల్ హెల్త్ ఐడీ" : "Digital Health Profile",
+              value: isTe ? "యాక్టివ్" : "Active",
+              change: isTe ? "DPDP & HIPAA సురక్షితం →" : "DPDP & HIPAA Secure →",
+              icon: ShieldCheck,
+              iconBg: "bg-indigo-50 text-indigo-600",
+              pillBg: "text-indigo-600",
+              clickable: true,
+              onClick: () => onNavigateToTab('patient_hub')
+            },
+            {
+              title: isTe ? "అత్యవసర SOS" : "Emergency SOS",
+              value: "24x7",
+              change: isTe ? "108 తక్షణ సాయం →" : "108 Instant Triage →",
+              icon: AlertTriangle,
+              iconBg: "bg-rose-50 text-rose-600",
+              pillBg: "text-rose-600",
+              clickable: true,
+              onClick: () => onNavigateToTab('chat')
+            }
+          ];
+        }
+
+        // Existing patient with seeded or booked appointments
+        const nextAppt = patientAppointments[0];
+        const tokenDisplay = nextAppt?.token_number_str || (nextAppt?.token_number ? String(nextAppt.token_number) : "#C-24");
+        const apptCount = patientAppointments.length || 1;
+        const apptTime = nextAppt?.time ? (isTe ? `ఈరోజు ${nextAppt.time}` : `Today ${nextAppt.time}`) : (isTe ? "రేపు ఉదయం 10:30" : "Tomorrow 10:30 AM");
+
         return [
           {
             title: t.kpi_upcoming_appointments,
-            value: "1",
-            change: isTe ? "రేపు ఉదయం 10:30" : "Tomorrow 10:30 AM",
+            value: String(apptCount),
+            change: apptTime,
             icon: Calendar,
             iconBg: "bg-blue-50 text-blue-600",
             pillBg: "text-blue-600",
             clickable: true,
-            onClick: () => onNavigateToTab('chat')
+            onClick: () => onNavigateToTab('my_passes')
           },
           {
             title: t.kpi_active_prescriptions,
@@ -115,7 +231,7 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
           },
           {
             title: t.kpi_live_tokens,
-            value: "#C-24",
+            value: tokenDisplay,
             change: isTe ? "3 రోగులు ముందున్నారు" : "3 patients ahead",
             icon: Clock,
             iconBg: "bg-amber-50 text-amber-600",
@@ -307,7 +423,7 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
           { title: isTe ? "కౌంటర్ బిల్లింగ్" : "Counter Billing", icon: CreditCard, color: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100/70", tab: "my_passes" },
           { title: t.token_queue_tv, icon: Clock, color: "bg-amber-50 text-amber-600 hover:bg-amber-100/70", tab: "token_tracker" },
           { title: t.doctor_rosters, icon: CheckSquare, color: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100/70", tab: "staff" },
-          { title: isTe ? "ఫ్రంట్ డెస్క్ చాట్" : "Front Desk Chat", icon: MessageSquare, color: "bg-sky-50 text-sky-600 hover:bg-sky-100/70", tab: "chat" }
+          { title: isTe ? "డేటా ఎక్స్‌పోర్ట్" : "Export Visits", icon: Download, color: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100/70", tab: "export_visits" }
         ];
       case 'admin':
         return [
@@ -316,7 +432,7 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
           { title: isTe ? "సిబ్బంది వివాదాలు" : "Staff Conflicts", icon: CheckSquare, color: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100/70", tab: "staff" },
           { title: isTe ? "డిజిటల్ ట్విన్" : "Digital Twin", icon: ClipboardList, color: "bg-purple-50 text-purple-600 hover:bg-purple-100/70", tab: "smartflow" },
           { title: isTe ? "బిల్లింగ్ & ఆదాయం" : "Billing & Revenue", icon: CreditCard, color: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100/70", tab: "my_passes" },
-          { title: isTe ? "క్యూ & టెలిమెట్రీ" : "Queue & Telemetry", icon: Clock, color: "bg-amber-50 text-amber-600 hover:bg-amber-100/70", tab: "token_tracker" }
+          { title: isTe ? "డేటా ఎక్స్‌పోర్ట్" : "Export Visits", icon: Download, color: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100/70", tab: "export_visits" }
         ];
       case 'doctor':
       default:
@@ -324,9 +440,9 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
           { title: isTe ? "రోగి రికార్డులు" : "Patient Records", icon: Users, color: "bg-blue-50 text-blue-600 hover:bg-blue-100/70", tab: "patient_hub" },
           { title: t.appointments, icon: Calendar, color: "bg-cyan-50 text-cyan-600 hover:bg-cyan-100/70", tab: "chat" },
           { title: t.prescriptions, icon: Pill, color: "bg-sky-50 text-sky-600 hover:bg-sky-100/70", tab: "doctor_dashboard" },
-          { title: t.lab_reports, icon: FlaskConical, color: "bg-purple-50 text-purple-600 hover:bg-purple-100/70", tab: "scanner" },
-          { title: t.treatment_plans, icon: ClipboardList, color: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100/70", tab: "smartflow" },
-          { title: t.medical_records, icon: FolderHeart, color: "bg-violet-50 text-violet-600 hover:bg-violet-100/70", tab: "my_passes" }
+          { title: t.ai_diagnosis, icon: Brain, color: "bg-purple-50 text-purple-600 hover:bg-purple-100/70", tab: "safety_center" },
+          { title: t.treatment_plans, icon: ClipboardList, color: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100/70", tab: "treatment_plans" },
+          { title: isTe ? "డేటా ఎక్స్‌పోర్ట్" : "Export Visits", icon: Download, color: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100/70", tab: "export_visits" }
         ];
     }
   })();
@@ -355,7 +471,7 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
   // Smart Reminders checklist
   const smartReminders = [
     { text: isTe ? "ఈరోజు 5 ఫాలో-అప్‌లు ఉన్నాయి" : "5 Follow-ups due today", action: isTe ? "చూడండి" : "View", tab: "patient_hub" },
-    { text: isTe ? "12 ల్యాబ్ నివేదికలు పెండింగ్‌లో ఉన్నాయి" : "12 Lab reports pending review", action: isTe ? "సమీక్షించండి" : "Review", tab: "scanner" },
+    { text: isTe ? "12 ల్యాబ్ నివేదికలు పెండింగ్‌లో ఉన్నాయి" : "12 Lab reports pending review", action: isTe ? "సమీక్షించండి" : "Review", tab: role === 'doctor' ? "treatment_plans" : "scanner" },
     { text: isTe ? "18 ప్రిస్క్రిప్షన్లు పెండింగ్‌లో ఉన్నాయి" : "18 Prescriptions pending", action: isTe ? "సమీక్షించండి" : "Review", tab: "doctor_dashboard" },
     { text: isTe ? "3 బీమా ఆమోదాలు పెండింగ్‌లో ఉన్నాయి" : "3 Insurance approvals pending", action: isTe ? "చూడండి" : "View", tab: "my_passes" },
     { text: isTe ? "2 అపాయింట్‌మెంట్లు నిర్ధారణ కావాలి" : "2 Appointments need confirmation", action: isTe ? "ధృవీకరించండి" : "Confirm", tab: "staff" }
@@ -387,6 +503,14 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
               <Stethoscope className="w-3.5 h-3.5 text-emerald-600" />
               <span>{roleGreetingSubtitle}</span>
             </div>
+            <button
+              onClick={() => setExportModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-2xs font-bold transition cursor-pointer"
+              title="Download patient visits data in CSV or Excel format"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{isTe ? "రోగుల డేటా ఎక్స్‌పోర్ట్ (CSV/Excel)" : "Export Visits (CSV/Excel)"}</span>
+            </button>
           </div>
         </div>
 
@@ -405,36 +529,77 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
                 <Bot className="w-4 h-4" />
               </div>
               <span className="text-xs font-bold text-slate-900">
-                {role === 'patient' ? t.ai_assistant_patient : role === 'receptionist' ? t.ai_assistant_reception : t.ai_assistant_doctor}
+                {role === 'patient' ? (isNewPortal ? (isTe ? "కేర్‌బ్రిడ్జ్ AI అసిస్టెంట్" : "CareBridge AI Assistant") : t.ai_assistant_patient) : role === 'receptionist' ? t.ai_assistant_reception : t.ai_assistant_doctor}
               </span>
             </div>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-100 text-blue-700 tracking-wider">
-              {role === 'patient' ? (isTe ? 'రోగి' : 'PATIENT') : 'BETA'}
+              {role === 'patient' ? (isNewPortal ? (isTe ? 'కొత్త రోగి' : 'NEW PATIENT') : (isTe ? 'రోగి' : 'PATIENT')) : 'BETA'}
             </span>
           </div>
 
           <p className="text-[11px] text-slate-500 leading-snug">
-            {role === 'patient' ? t.ai_desc_patient : role === 'receptionist' ? t.ai_desc_reception : t.ai_desc_doctor}
+            {role === 'patient' 
+              ? (isNewPortal 
+                  ? (isTe ? "డాక్టర్ సంప్రదింపు కావాలా? మీ లక్షణాలను తెలపండి, తక్కువ వేచి ఉండే సమయంతో స్లాట్ బుక్ చేస్తాను." : "Need doctor consultation? Tell me your symptoms and I will find specialist doctors with minimum queue waiting times.")
+                  : t.ai_desc_patient) 
+              : role === 'receptionist' ? t.ai_desc_reception : t.ai_desc_doctor}
           </p>
 
           <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between gap-3">
             <div>
               <div className="text-xs font-bold text-slate-800">
-                {role === 'patient' ? t.ai_sample_cardio : role === 'receptionist' ? t.ai_sample_telemetry : t.ai_sample_summary}
+                {role === 'patient' 
+                  ? (isNewPortal ? (isTe ? "తక్కువ వేచి ఉండే స్లాట్" : "Book lowest-wait appointment") : t.ai_sample_cardio) 
+                  : role === 'receptionist' ? t.ai_sample_telemetry : t.ai_sample_summary}
               </div>
               <div className="text-[10px] text-slate-500">
-                {role === 'patient' ? t.ai_sample_cardio_sub : role === 'receptionist' ? t.ai_sample_telemetry_sub : t.ai_sample_summary_sub}
+                {role === 'patient' 
+                  ? (isNewPortal ? (isTe ? "AI స్మార్ట్‌ఫ్లో డాక్టర్ మ్యాచింగ్" : "AI SmartFlow 2.0 Doctor Matching") : t.ai_sample_cardio_sub) 
+                  : role === 'receptionist' ? t.ai_sample_telemetry_sub : t.ai_sample_summary_sub}
               </div>
             </div>
             <button
-              onClick={role === 'patient' ? () => handleAiQuickSend("Naaku Guntur lo cardiologist appointment kavali. Telugu speaking doctor.") : handleGenerateAiSummary}
+              onClick={role === 'patient' ? () => handleAiQuickSend(isTe ? "Naaku general medicine appointment kavali, waiting time takkuva undali" : "I need an appointment with low waiting time.") : handleGenerateAiSummary}
               className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition cursor-pointer shrink-0"
             >
-              {role === 'patient' ? t.btn_book_now : t.btn_generate_summary}
+              {role === 'patient' ? (isNewPortal ? (isTe ? "తొలి స్లాట్ బుక్ చేయండి →" : "Book First Slot →") : t.btn_book_now) : t.btn_generate_summary}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Fresh Patient Portal Notification Banner */}
+      {isNewPortal && (
+        <div className="rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200/90 p-4 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-bold text-slate-900">
+                  {isTe ? "కొత్త రోగి పోర్టల్ యాక్టివ్ చేయబడింది! ✨" : "Fresh Patient Portal Activated! ✨"}
+                </h4>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                  {isTe ? "క్లీన్ పోర్టల్" : "Clean State"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                {isTe
+                  ? "మీ ప్రొఫైల్‌లో ఇంకా ఎలాంటి రాబోయే అపాయింట్‌మెంట్‌లు, ప్రిస్క్రిప్షన్‌లు, ల్యాబ్ రిపోర్ట్‌లు లేదా లైవ్ ఓపీడీ టోకెన్‌లు లేవు. మీ మొదటి సంప్రదింపు కోసం సిద్ధంగా ఉంది."
+                  : "Welcome to your new patient dashboard. No upcoming appointments, active prescriptions, lab reports ready, or live OPD tokens are on file."
+                }
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigateToTab('chat')}
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer shrink-0"
+          >
+            {isTe ? "మొదటి అపాయింట్‌మెంట్ బుక్ చేయండి →" : "Book First Consultation →"}
+          </button>
+        </div>
+      )}
 
       {/* 2. Key Metrics Row (5 Cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -485,40 +650,74 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
           </div>
 
           {role === 'patient' ? (
-            <div className="space-y-3">
-              <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                    {t.confirmed_visit}
-                  </span>
-                  <span className="text-[11px] font-mono font-bold text-blue-700">{t.token_label} #C-24</span>
+            isNewPortal ? (
+              <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                  <Calendar className="w-5 h-5" />
                 </div>
-                <div>
-                  <h4 className="text-sm font-bold text-slate-900">Dr. Anil Kumar</h4>
-                  <p className="text-xs text-slate-500">{isTe ? "ఇంటర్వెన్షనల్ కార్డియాలజిస్ట్ • గది 102" : "Interventional Cardiologist • Room 102"}</p>
-                  <p className="text-[11px] text-blue-600 mt-1 font-medium">{isTe ? "కేర్‌బ్రిడ్జ్ హార్ట్ సెంటర్ గుంటూరు" : "CareBridge Heart Center Guntur"}</p>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-slate-900">{isTe ? "రాబోయే అపాయింట్‌మెంట్‌లు లేవు" : "No Upcoming Appointments"}</h4>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    {isTe
+                      ? "మీకు ఇంకా ఎటువంటి వైద్యుల అపాయింట్‌మెంట్‌లు షెడ్యూల్ కాలేదు. సమీప నెట్‌వర్క్ ఆసుపత్రుల్లో తక్కువ వెయిటింగ్ టైమ్‌తో స్లాట్‌ను బుక్ చేసుకోండి."
+                      : "You currently have no scheduled consultations. Book your first appointment with minimal queue wait time."
+                    }
+                  </p>
                 </div>
-                <div className="pt-2 border-t border-blue-200/60 flex items-center justify-between text-xs text-slate-600">
-                  <span className="font-semibold">{isTe ? "రేపు ఉదయం 10:30" : "Tomorrow at 10:30 AM"}</span>
-                  <button
-                    onClick={() => onNavigateToTab('my_passes')}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer underline"
-                  >
-                    {t.view_digital_pass}
-                  </button>
-                </div>
+                <button
+                  onClick={() => onNavigateToTab('chat')}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>{isTe ? "తొలి అపాయింట్‌మెంట్ బుక్ చేయండి" : "Book First Appointment"}</span>
+                </button>
               </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                      {t.confirmed_visit}
+                    </span>
+                    <span className="text-[11px] font-mono font-bold text-blue-700">
+                      {t.token_label} {patientAppointments[0]?.token_number_str || patientAppointments[0]?.token_number || "#C-24"}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">
+                      {patientAppointments[0]?.doctor_name || "Dr. Naveen Kumar"}
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      {patientAppointments[0]?.department ? `${patientAppointments[0].department} • ${patientAppointments[0].room_number || 'Room 102'}` : (isTe ? "ఇంటర్వెన్షనల్ కార్డియాలజిస్ట్ • గది 102" : "Interventional Cardiologist • Room 102")}
+                    </p>
+                    <p className="text-[11px] text-blue-600 mt-1 font-medium">
+                      {patientAppointments[0]?.hospital || (isTe ? "కేర్‌బ్రిడ్జ్ హార్ట్ సెంటర్ గుంటూరు" : "CareBridge Heart Center Guntur")}
+                    </p>
+                  </div>
+                  <div className="pt-2 border-t border-blue-200/60 flex items-center justify-between text-xs text-slate-600">
+                    <span className="font-semibold">
+                      {patientAppointments[0]?.time ? `${patientAppointments[0].date || 'Today'} at ${patientAppointments[0].time}` : (isTe ? "రేపు ఉదయం 10:30" : "Tomorrow at 10:30 AM")}
+                    </span>
+                    <button
+                      onClick={() => onNavigateToTab('my_passes')}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer underline"
+                    >
+                      {t.view_digital_pass}
+                    </button>
+                  </div>
+                </div>
 
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs text-slate-600">
-                <div>
-                  <div className="font-bold text-slate-800">{isTe ? "డాక్టర్ వర్మ (జనరల్ మెడిసిన్)" : "Dr. Varma (General Medicine)"}</div>
-                  <div className="text-[10px] text-slate-400">{isTe ? "త్రైమాసిక ఆరోగ్య సమీక్ష • గది 201" : "Quarterly Health Review • Room 201"}</div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs text-slate-600">
+                  <div>
+                    <div className="font-bold text-slate-800">{isTe ? "డాక్టర్ వర్మ (జనరల్ మెడిసిన్)" : "Dr. Varma (General Medicine)"}</div>
+                    <div className="text-[10px] text-slate-400">{isTe ? "త్రైమాసిక ఆరోగ్య సమీక్ష • గది 201" : "Quarterly Health Review • Room 201"}</div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700">
+                    {t.next_week}
+                  </span>
                 </div>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700">
-                  {t.next_week}
-                </span>
               </div>
-            </div>
+            )
           ) : (
             <div className="space-y-2.5">
               {todayAppointments.map((appt, i) => (
@@ -568,7 +767,13 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
                 return (
                   <button
                     key={idx}
-                    onClick={() => onNavigateToTab(ql.tab)}
+                    onClick={() => {
+                      if (ql.tab === 'export_visits') {
+                        setExportModalOpen(true);
+                      } else {
+                        onNavigateToTab(ql.tab);
+                      }
+                    }}
                     className={`p-3 rounded-2xl border border-slate-100 text-center flex flex-col items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs ${ql.color}`}
                   >
                     <Icon className="w-5 h-5" />
@@ -580,12 +785,12 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
 
             {/* SmartFlow / Health Support Banner */}
             <button
-              onClick={() => onNavigateToTab(role === 'patient' ? 'chat' : 'smartflow')}
+              onClick={() => onNavigateToTab(role === 'patient' ? 'chat' : (role === 'doctor' ? 'treatment_plans' : 'smartflow'))}
               className="w-full p-3 rounded-xl bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 text-indigo-900 flex items-center justify-between text-xs font-bold hover:shadow-xs transition cursor-pointer"
             >
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-indigo-600" />
-                <span>{role === 'patient' ? t.banner_patient_ai : t.banner_staff_ai}</span>
+                <span>{role === 'patient' ? t.banner_patient_ai : (role === 'doctor' ? (isTe ? "క్లినికల్ చికిత్స ప్రణాళికలు & ప్రోటోకాల్స్" : "Clinical Treatment Plans & Care Protocols") : t.banner_staff_ai)}</span>
               </div>
               <ChevronRight className="w-4 h-4 text-indigo-400" />
             </button>
@@ -593,50 +798,92 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
 
           {/* Queue Status: Role-tailored */}
           {role === 'patient' ? (
-            <div className="bg-white rounded-2xl border border-blue-200 p-5 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-blue-600" />
-                  <span>{t.queue_box_title}</span>
-                </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {isTe ? "లైవ్ యాక్టివ్" : "Live Active"}
-                </span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/60 border border-blue-100 flex items-center justify-between">
-                <div>
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">{isTe ? "మీ టోకెన్ సంఖ్య" : "Your Token Number"}</div>
-                  <div className="text-3xl font-black text-blue-700 font-mono tracking-tight">#C-24</div>
-                  <div className="text-xs text-slate-600 font-medium mt-1">{isTe ? "డాక్టర్ అనిల్ కుమార్ • గది 102" : "Dr. Anil Kumar • Room 102"}</div>
-                </div>
-                <div className="text-right space-y-1">
-                  <div className="text-[10px] text-slate-500">{t.now_serving}</div>
-                  <div className="text-xl font-bold text-slate-900 font-mono">#C-21</div>
-                  <span className="inline-block text-[11px] font-bold text-emerald-700 bg-white border border-emerald-200 px-2 py-0.5 rounded-md">
-                    {isTe ? "3 రోగులు ముందున్నారు" : "3 patients ahead"}
+            isNewPortal ? (
+              <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-slate-500" />
+                    <span>{isTe ? "ఓపీడీ క్యూ టోకెన్ స్థితి" : "OPD Queue Token Status"}</span>
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                    {isTe ? "టోకెన్ లేదు" : "No Active Token"}
                   </span>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3 pt-1 text-center">
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <div className="text-[10px] text-slate-400">{t.est_wait}</div>
-                  <div className="text-sm font-black text-slate-900">~12 {t.minutes_short}</div>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <div className="text-[10px] text-slate-400">{isTe ? "సంప్రదింపు ఫీజు" : "Consultation Fee"}</div>
-                  <div className="text-sm font-black text-emerald-700">₹500 {isTe ? "(చెల్లించబడింది)" : "(Paid)"}</div>
+                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-xs font-bold text-slate-800">{isTe ? "క్రియాశీల ఓపీడీ టోకెన్ లేదు" : "No Active OPD Token"}</div>
+                    <p className="text-[11px] text-slate-500 leading-relaxed max-w-xs mx-auto">
+                      {isTe 
+                        ? "మీరు అపాయింట్‌మెంట్ బుక్ చేసుకున్నప్పుడు లైవ్ వెయిటింగ్ టైమ్ మరియు రూమ్ నంబర్‌తో కూడిన డిజిటల్ టోకెన్ కేటాయించబడుతుంది." 
+                        : "When you book a doctor appointment, an automated digital queue token with estimated wait times will be generated here."
+                      }
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => onNavigateToTab('chat')}
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs transition shadow-xs cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>{isTe ? "స్లాట్‌లు తనిఖీ చేయండి" : "Find Low-Wait Slots"}</span>
+                  </button>
                 </div>
               </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-blue-200 p-5 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-blue-600" />
+                    <span>{t.queue_box_title}</span>
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    {isTe ? "లైవ్ యాక్టివ్" : "Live Active"}
+                  </span>
+                </div>
 
-              <button
-                onClick={() => onNavigateToTab('token_tracker')}
-                className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
-              >
-                <span>{t.btn_track_live}</span>
-              </button>
-            </div>
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/60 border border-blue-100 flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">{isTe ? "మీ టోకెన్ సంఖ్య" : "Your Token Number"}</div>
+                    <div className="text-3xl font-black text-blue-700 font-mono tracking-tight">
+                      {patientAppointments[0]?.token_number_str || patientAppointments[0]?.token_number || "#C-24"}
+                    </div>
+                    <div className="text-xs text-slate-600 font-medium mt-1">
+                      {patientAppointments[0]?.doctor_name ? `${patientAppointments[0].doctor_name} • ${patientAppointments[0].room_number || 'Room 102'}` : (isTe ? "డాక్టర్ నవీన్ కుమార్ • గది 102" : "Dr. Naveen Kumar • Room 102")}
+                    </div>
+                  </div>
+                  <div className="text-right space-y-1">
+                    <div className="text-[10px] text-slate-500">{t.now_serving}</div>
+                    <div className="text-xl font-bold text-slate-900 font-mono">#C-21</div>
+                    <span className="inline-block text-[11px] font-bold text-emerald-700 bg-white border border-emerald-200 px-2 py-0.5 rounded-md">
+                      {isTe ? "3 రోగులు ముందున్నారు" : "3 patients ahead"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1 text-center">
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <div className="text-[10px] text-slate-400">{t.est_wait}</div>
+                    <div className="text-sm font-black text-slate-900">
+                      ~{patientAppointments[0]?.simulated_wait_min || 12} {t.minutes_short}
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <div className="text-[10px] text-slate-400">{isTe ? "సంప్రదింపు ఫీజు" : "Consultation Fee"}</div>
+                    <div className="text-sm font-black text-emerald-700">₹{patientAppointments[0]?.consultation_fee || 500} {isTe ? "(చెల్లించబడింది)" : "(Paid)"}</div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => onNavigateToTab('token_tracker')}
+                  className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition cursor-pointer"
+                >
+                  <span>{t.btn_track_live}</span>
+                </button>
+              </div>
+            )
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -746,19 +993,36 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
                 {isTe ? "పూర్తి క్యాలెండర్ చూడండి →" : "View Full Calendar →"}
               </button>
             </div>
-            <div className="space-y-2 text-xs">
-              {todayAppointments.slice(0, 3).map((s, idx) => (
-                <div key={idx} className="flex items-center justify-between text-slate-700">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[11px] font-bold text-slate-400">{s.time}</span>
-                    <span className="font-medium text-slate-900">{s.patient}</span>
+            {isNewPortal ? (
+              <div className="p-3 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
+                <p className="text-xs font-semibold text-slate-700">
+                  {isTe ? "ఈరోజు అపాయింట్‌మెంట్లు లేవు" : "No Appointments Today"}
+                </p>
+                <p className="text-[10px] text-slate-400">
+                  {isTe ? "కొత్త స్లాట్ బుక్ చేసుకోవడానికి AI ని అడగండి" : "Ask AI to find a low-wait OPD slot"}
+                </p>
+                <button
+                  onClick={() => onNavigateToTab('chat')}
+                  className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] transition cursor-pointer"
+                >
+                  {isTe ? "స్లాట్ బుక్ చేయండి" : "Book Slot"}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2 text-xs">
+                {todayAppointments.slice(0, 3).map((s, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-slate-700">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] font-bold text-slate-400">{s.time}</span>
+                      <span className="font-medium text-slate-900">{s.patient}</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-600 font-bold">
+                      {isTe ? (s.status === 'Confirmed' ? t.confirmed : t.waiting) : s.status}
+                    </span>
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-600 font-bold">
-                    {isTe ? (s.status === 'Confirmed' ? t.confirmed : t.waiting) : s.status}
-                  </span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Real-time Notifications */}
@@ -772,29 +1036,52 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
                 {t.btn_view_all}
               </button>
             </div>
-            <div className="space-y-2 text-xs">
-              <div className="p-2 rounded-xl bg-blue-50/60 border border-blue-100 flex items-start gap-2">
-                <FlaskConical className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-semibold text-slate-800">{isTe ? "అర్జున్ శర్మ ల్యాబ్ నివేదిక సిద్ధంగా ఉంది." : "Lab report for Arjun Sharma is ready."}</div>
-                  <div className="text-[10px] text-slate-400">{isTe ? "10 నిమిషాల క్రితం" : "10 mins ago"}</div>
+            {isNewPortal ? (
+              <div className="space-y-2 text-xs">
+                <div className="p-2.5 rounded-xl bg-blue-50/60 border border-blue-100 flex items-start gap-2">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-slate-800">
+                      {isTe ? "కొత్త పేషెంట్ పోర్టల్ యాక్టివేట్ చేయబడింది." : "New Patient Portal Activated."}
+                    </div>
+                    <div className="text-[10px] text-slate-400">{isTe ? "ఇప్పుడే" : "Just now"}</div>
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-100 flex items-start gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-slate-800">
+                      {isTe ? "క్లీన్ హెల్త్ రికార్డ్స్: ఎటువంటి పెండింగ్ బిల్లులు లేదా టోకెన్లు లేవు." : "Clean Health Records: No pending bills or tokens."}
+                    </div>
+                    <div className="text-[10px] text-slate-400">{isTe ? "ఆన్‌లైన్" : "Active"}</div>
+                  </div>
                 </div>
               </div>
-              <div className="p-2 rounded-xl bg-emerald-50/60 border border-emerald-100 flex items-start gap-2">
-                <Users className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-semibold text-slate-800">{isTe ? "ప్రియా నాయర్ నుండి కొత్త అపాయింట్‌మెంట్ అభ్యర్థన." : "New appointment request from Priya Nair."}</div>
-                  <div className="text-[10px] text-slate-400">{isTe ? "25 నిమిషాల క్రితం" : "25 mins ago"}</div>
+            ) : (
+              <div className="space-y-2 text-xs">
+                <div className="p-2 rounded-xl bg-blue-50/60 border border-blue-100 flex items-start gap-2">
+                  <FlaskConical className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-slate-800">{isTe ? "అర్జున్ శర్మ ల్యాబ్ నివేదిక సిద్ధంగా ఉంది." : "Lab report for Arjun Sharma is ready."}</div>
+                    <div className="text-[10px] text-slate-400">{isTe ? "10 నిమిషాల క్రితం" : "10 mins ago"}</div>
+                  </div>
+                </div>
+                <div className="p-2 rounded-xl bg-emerald-50/60 border border-emerald-100 flex items-start gap-2">
+                  <Users className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-slate-800">{isTe ? "ప్రియా నాయర్ నుండి కొత్త అపాయింట్‌మెంట్ అభ్యర్థన." : "New appointment request from Priya Nair."}</div>
+                    <div className="text-[10px] text-slate-400">{isTe ? "25 నిమిషాల క్రితం" : "25 mins ago"}</div>
+                  </div>
+                </div>
+                <div className="p-2 rounded-xl bg-amber-50/60 border border-amber-100 flex items-start gap-2">
+                  <Pill className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-slate-800">{isTe ? "ప్రిస్క్రిప్షన్ అలర్ట్: 18 పెండింగ్ ప్రిస్క్రిప్షన్లు." : "Prescription alert: 18 pending prescriptions."}</div>
+                    <div className="text-[10px] text-slate-400">{isTe ? "45 నిమిషాల క్రితం" : "45 mins ago"}</div>
+                  </div>
                 </div>
               </div>
-              <div className="p-2 rounded-xl bg-amber-50/60 border border-amber-100 flex items-start gap-2">
-                <Pill className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <div className="font-semibold text-slate-800">{isTe ? "ప్రిస్క్రిప్షన్ అలర్ట్: 18 పెండింగ్ ప్రిస్క్రిప్షన్లు." : "Prescription alert: 18 pending prescriptions."}</div>
-                  <div className="text-[10px] text-slate-400">{isTe ? "45 నిమిషాల క్రితం" : "45 mins ago"}</div>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Docked AI Assistant Widget */}
@@ -870,127 +1157,252 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
 
       {/* 4. Bottom Row (4 Cards) - Role Customised */}
       {role === 'patient' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Patient Card 1: My Next Appointment */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                <span>{isTe ? "తదుపరి సంప్రదింపు" : "Next Consultation"}</span>
-              </h4>
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                {t.confirmed}
-              </span>
-            </div>
-            <div className="space-y-1.5 text-xs text-slate-700">
-              <div className="font-bold text-slate-900 text-sm">Dr. Anil Kumar</div>
-              <div className="text-[11px] text-slate-500">{isTe ? "ఇంటర్వెన్షనల్ కార్డియాలజిస్ట్" : "Interventional Cardiologist"}</div>
-              <div className="text-[11px] text-blue-600 font-medium">{isTe ? "కేర్‌బ్రిడ్జ్ హార్ట్ సెంటర్ గుంటూరు • గది 102" : "CareBridge Heart Center Guntur • Room 102"}</div>
-              <div className="p-2 rounded-xl bg-blue-50/60 border border-blue-100 flex items-center justify-between mt-2">
-                <span className="text-[11px] font-semibold">{isTe ? "రేపు ఉదయం 10:30" : "Tomorrow at 10:30 AM"}</span>
-                <span className="font-mono font-bold text-blue-700">#C-24</span>
+        isNewPortal ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* New Patient Card 1: Upcoming Appointments */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{isTe ? "రాబోయే అపాయింట్‌మెంట్‌లు" : "Upcoming Appointments"}</span>
+                </h4>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                  {isTe ? "షెడ్యూల్ కాలేదు" : "0 Scheduled"}
+                </span>
               </div>
+              <div className="space-y-2 text-xs text-slate-600">
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                  <div className="font-bold text-slate-800">{isTe ? "ఎటువంటి అపాయింట్‌మెంట్‌లు లేవు" : "No Upcoming Consultations"}</div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    {isTe
+                      ? "మీకు ప్రస్తుతం షెడ్యూల్ చేసిన అపాయింట్‌మెంట్‌లు లేవు. AI అసిస్టెంట్ ద్వారా తక్కువ వెయిటింగ్ టైమ్ స్లాట్‌ను బుక్ చేసుకోండి."
+                      : "You do not have any appointments scheduled yet. Use our AI assistant to book a consultation with lowest wait time."
+                    }
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigateToTab('chat')}
+                className="w-full mt-1 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition cursor-pointer flex items-center justify-center gap-1"
+              >
+                <span>➕</span>
+                <span>{isTe ? "అపాయింట్‌మెంట్ బుక్ చేయండి" : "Book First Consultation"}</span>
+              </button>
             </div>
-            <button
-              onClick={() => onNavigateToTab('my_passes')}
-              className="w-full mt-1 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition cursor-pointer"
-            >
-              {t.view_digital_pass}
-            </button>
-          </div>
 
-          {/* Patient Card 2: My Active Prescriptions */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                <Pill className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{isTe ? "యాక్టివ్ మందులు (Rx)" : "Active Medications (Rx)"}</span>
-              </h4>
-              <span className="text-[10px] font-bold text-emerald-600">{isTe ? "2 యాక్టివ్" : "2 Active"}</span>
-            </div>
-            <div className="space-y-2 text-xs">
-              <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="flex items-center justify-between font-bold text-slate-900">
-                  <span>Atorvastatin 10mg</span>
-                  <span className="text-[10px] text-slate-400 font-normal">{isTe ? "రోజువారీ" : "Daily"}</span>
-                </div>
-                <div className="text-[10px] text-slate-500 mt-0.5">{isTe ? "డిన్నర్ తర్వాత 1 టాబ్లెట్ (కొలెస్ట్రాల్ నియంత్రణ)" : "1 tablet after dinner (Cholesterol control)"}</div>
+            {/* New Patient Card 2: Active Prescriptions */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Pill className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>{isTe ? "యాక్టివ్ ప్రిస్క్రిప్షన్‌లు (Rx)" : "Active Prescriptions (Rx)"}</span>
+                </h4>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                  {isTe ? "మందులు లేవు" : "0 Active"}
+                </span>
               </div>
-              <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
-                <div className="flex items-center justify-between font-bold text-slate-900">
-                  <span>Metoprolol 25mg</span>
-                  <span className="text-[10px] text-slate-400 font-normal">{isTe ? "రోజువారీ" : "Daily"}</span>
+              <div className="space-y-2 text-xs text-slate-600">
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                  <div className="font-bold text-slate-800">{isTe ? "క్రియాశీల ప్రిస్క్రిప్షన్‌లు లేవు" : "No Active Medications"}</div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    {isTe
+                      ? "ప్రస్తుతం ఎటువంటి మందులు సూచించబడలేదు. వైద్యుల సంప్రదింపు తర్వాత ప్రిస్క్రిప్షన్‌లు ఇక్కడ స్వయంచాలకంగా కనిపిస్తాయి."
+                      : "No active prescriptions on file. Doctor-verified digital prescriptions will appear here after consultation."
+                    }
+                  </p>
                 </div>
-                <div className="text-[10px] text-slate-500 mt-0.5">{isTe ? "ఉదయం టిఫిన్ తర్వాత 1 టాబ్లెట్ (రక్తపోటు)" : "1 tablet morning after breakfast (Blood Pressure)"}</div>
               </div>
+              <button
+                onClick={() => onNavigateToTab('prescriptions')}
+                className="w-full mt-1 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition cursor-pointer"
+              >
+                {isTe ? "ప్రిస్క్రిప్షన్ పోర్టల్ →" : "Prescriptions Portal →"}
+              </button>
             </div>
-            <button
-              onClick={() => onNavigateToTab('prescriptions')}
-              className="w-full mt-1 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition cursor-pointer"
-            >
-              {isTe ? "అన్ని ప్రిస్క్రిప్షన్లు & రీఫిల్స్ →" : "All Prescriptions & Refills →"}
-            </button>
-          </div>
 
-          {/* Patient Card 3: Doctor's Latest Advice */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                <Stethoscope className="w-3.5 h-3.5 text-indigo-600" />
-                <span>{isTe ? "డాక్టర్ సంరక్షణ సలహా" : "Doctor's Care Advice"}</span>
-              </h4>
-              <span className="text-[10px] font-bold text-indigo-600">{isTe ? "వైద్యుల సూచన" : "Physician Order"}</span>
-            </div>
-            <div className="p-3 rounded-xl bg-indigo-50/50 border border-indigo-100 text-xs text-slate-700 space-y-2">
-              <p className="text-[11px] leading-relaxed italic text-indigo-950">
-                {isTe
-                  ? "\"తక్కువ ఉప్పు ఉన్న ఆహారం తీసుకోండి, రోజూ ఉదయం బీపీ నమోదు చేయండి మరియు తదుపరి పరీక్ష వరకు శ్రమతో కూడిన పనులు చేయకండి.\""
-                  : "\"Maintain low-sodium diet, record morning BP daily, and avoid strenuous physical exertion until your in-person follow-up review.\""
-                }
-              </p>
-              <div className="text-[10px] text-indigo-700 font-bold border-t border-indigo-100 pt-1.5">
-                {isTe ? "— డాక్టర్ అనిల్ కుమార్ (కార్డియాలజీ లీడ్)" : "— Dr. Anil Kumar (Cardiology Lead)"}
+            {/* New Patient Card 3: Lab Reports Ready */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <FlaskConical className="w-3.5 h-3.5 text-cyan-600" />
+                  <span>{isTe ? "ల్యాబ్ నివేదికలు" : "Lab Reports Ready"}</span>
+                </h4>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                  {isTe ? "రిపోర్టులు లేవు" : "0 Reports"}
+                </span>
               </div>
+              <div className="space-y-2 text-xs text-slate-600">
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                  <div className="font-bold text-slate-800">{isTe ? "ల్యాబ్ రిపోర్టులు లేవు" : "No Lab Reports Ready"}</div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    {isTe
+                      ? "ఎటువంటి పరీక్ష నివేదికలు నమోదు కాలేదు. పాత రక్త పరీక్షలు లేదా ప్రిస్క్రిప్షన్‌లను స్కాన్ చేయడానికి OCR స్కానర్ ఉపయోగించండి."
+                      : "No diagnostic reports uploaded yet. You can scan past test sheets and prescriptions using our AI OCR scanner."
+                    }
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigateToTab('scanner')}
+                className="w-full mt-1 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition cursor-pointer"
+              >
+                {isTe ? "OCR స్కానర్ తెరవండి →" : "Open Report Scanner →"}
+              </button>
             </div>
-            <div className="text-[10px] text-slate-400 flex items-center justify-between px-1">
-              <span>{isTe ? "తదుపరి సమీక్ష 14 రోజుల్లో" : "Next review in 14 days"}</span>
-              <span>{isTe ? "రెగ్యులర్ ఓపీడీ" : "Routine OPD"}</span>
-            </div>
-          </div>
 
-          {/* Patient Card 4: Patient Support & SOS Services */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                <span>{isTe ? "కేర్‌బ్రిడ్జ్ సేవలు" : "CareBridge Services"}</span>
-              </h4>
-              <span className="text-[10px] font-bold text-emerald-600">{isTe ? "24x7 అందుబాటులో" : "24x7 Active"}</span>
-            </div>
-            <div className="space-y-2 text-xs">
-              <div className="p-2 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-rose-900 text-xs">{isTe ? "108 అత్యవసర SOS" : "108 Emergency SOS"}</div>
-                  <div className="text-[10px] text-rose-600">{isTe ? "తక్షణ ట్రియాజ్ & అంబులెన్స్ కాల్" : "Instant triage & ambulance call"}</div>
-                </div>
-                <span className="text-xs">🚨</span>
+            {/* New Patient Card 4: Live OPD Tokens */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>{isTe ? "లైవ్ ఓపీడీ టోకెన్లు" : "Live OPD Tokens"}</span>
+                </h4>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                  {isTe ? "టోకెన్ లేదు" : "No Active Token"}
+                </span>
               </div>
-              <div className="p-2 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-blue-900 text-xs">{isTe ? "వాట్సాప్ అప్‌డేట్లు" : "WhatsApp Updates"}</div>
-                  <div className="text-[10px] text-blue-600">+91 98480 22334 {isTe ? "(యాక్టివ్)" : "(Active)"}</div>
+              <div className="space-y-2 text-xs text-slate-600">
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                  <div className="font-bold text-slate-800">{isTe ? "క్రియాశీల టోకెన్ లేదు" : "No Live Queue Token"}</div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    {isTe
+                      ? "మీ అపాయింట్‌మెంట్ నిర్ధారించబడినప్పుడు లైవ్ టోకెన్ జారీ చేయబడుతుంది. మీరు వెయిటింగ్ హాల్ టీవీని ఎప్పుడైనా చూడవచ్చు."
+                      : "Tokens are generated upon booking confirmation. You can view the OPD Waiting Hall TV live queue anytime."
+                    }
+                  </p>
                 </div>
-                <span className="text-xs">💬</span>
               </div>
+              <button
+                onClick={() => onNavigateToTab('tv')}
+                className="w-full mt-1 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition cursor-pointer"
+              >
+                {isTe ? "ఓపీడీ వెయిటింగ్ హాల్ టీవీ స్థితి →" : "OPD Waiting Hall TV Status →"}
+              </button>
             </div>
-            <button
-              onClick={() => onNavigateToTab('token_tracker')}
-              className="w-full mt-1 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition cursor-pointer"
-            >
-              {isTe ? "ఓపీడీ వెయిటింగ్ హాల్ టీవీ స్థితి →" : "OPD Waiting Hall TV Status →"}
-            </button>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Patient Card 1: My Next Appointment */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{isTe ? "తదుపరి సంప్రదింపు" : "Next Consultation"}</span>
+                </h4>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  {t.confirmed}
+                </span>
+              </div>
+              <div className="space-y-1.5 text-xs text-slate-700">
+                <div className="font-bold text-slate-900 text-sm">{patientAppointments[0]?.doctor_name || "Dr. Naveen Kumar"}</div>
+                <div className="text-[11px] text-slate-500">{patientAppointments[0]?.department ? `${patientAppointments[0].department} • ${patientAppointments[0].room_number || 'Room 102'}` : (isTe ? "ఇంటర్వెన్షనల్ కార్డియాలజిస్ట్" : "Interventional Cardiologist")}</div>
+                <div className="text-[11px] text-blue-600 font-medium">{patientAppointments[0]?.hospital || (isTe ? "కేర్‌బ్రిడ్జ్ హార్ట్ సెంటర్ గుంటూరు • గది 102" : "CareBridge Heart Center Guntur • Room 102")}</div>
+                <div className="p-2 rounded-xl bg-blue-50/60 border border-blue-100 flex items-center justify-between mt-2">
+                  <span className="text-[11px] font-semibold">{patientAppointments[0]?.time ? `${patientAppointments[0].date || 'Today'} at ${patientAppointments[0].time}` : (isTe ? "రేపు ఉదయం 10:30" : "Tomorrow at 10:30 AM")}</span>
+                  <span className="font-mono font-bold text-blue-700">{patientAppointments[0]?.token_number_str || patientAppointments[0]?.token_number || "#C-24"}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigateToTab('my_passes')}
+                className="w-full mt-1 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition cursor-pointer"
+              >
+                {t.view_digital_pass}
+              </button>
+            </div>
+
+            {/* Patient Card 2: My Active Prescriptions */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Pill className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>{isTe ? "యాక్టివ్ మందులు (Rx)" : "Active Medications (Rx)"}</span>
+                </h4>
+                <span className="text-[10px] font-bold text-emerald-600">{isTe ? "2 యాక్టివ్" : "2 Active"}</span>
+              </div>
+              <div className="space-y-2 text-xs">
+                <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex items-center justify-between font-bold text-slate-900">
+                    <span>Atorvastatin 10mg</span>
+                    <span className="text-[10px] text-slate-400 font-normal">{isTe ? "రోజువారీ" : "Daily"}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">{isTe ? "డిన్నర్ తర్వాత 1 టాబ్లెట్ (కొలెస్ట్రాల్ నియంత్రణ)" : "1 tablet after dinner (Cholesterol control)"}</div>
+                </div>
+                <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex items-center justify-between font-bold text-slate-900">
+                    <span>Metoprolol 25mg</span>
+                    <span className="text-[10px] text-slate-400 font-normal">{isTe ? "రోజువారీ" : "Daily"}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">{isTe ? "ఉదయం టిఫిన్ తర్వాత 1 టాబ్లెట్ (రక్తపోటు)" : "1 tablet morning after breakfast (Blood Pressure)"}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigateToTab('prescriptions')}
+                className="w-full mt-1 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition cursor-pointer"
+              >
+                {isTe ? "అన్ని ప్రిస్క్రిప్షన్లు & రీఫిల్స్ →" : "All Prescriptions & Refills →"}
+              </button>
+            </div>
+
+            {/* Patient Card 3: Doctor's Latest Advice */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <Stethoscope className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>{isTe ? "డాక్టర్ సంరక్షణ సలహా" : "Doctor's Care Advice"}</span>
+                </h4>
+                <span className="text-[10px] font-bold text-indigo-600">{isTe ? "వైద్యుల సూచన" : "Physician Order"}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-indigo-50/50 border border-indigo-100 text-xs text-slate-700 space-y-2">
+                <p className="text-[11px] leading-relaxed italic text-indigo-950">
+                  {isTe
+                    ? "\"తక్కువ ఉప్పు ఉన్న ఆహారం తీసుకోండి, రోజూ ఉదయం బీపీ నమోదు చేయండి మరియు తదుపరి పరీక్ష వరకు శ్రమతో కూడిన పనులు చేయకండి.\""
+                    : "\"Maintain low-sodium diet, record morning BP daily, and avoid strenuous physical exertion until your in-person follow-up review.\""
+                  }
+                </p>
+                <div className="text-[10px] text-indigo-700 font-bold border-t border-indigo-100 pt-1.5">
+                  {isTe ? "— డాక్టర్ నవీన్ కుమార్ (కార్డియాలజీ లీడ్)" : "— Dr. Naveen Kumar (Cardiology Lead)"}
+                </div>
+              </div>
+              <div className="text-[10px] text-slate-400 flex items-center justify-between px-1">
+                <span>{isTe ? "తదుపరి సమీక్ష 14 రోజుల్లో" : "Next review in 14 days"}</span>
+                <span>{isTe ? "రెగ్యులర్ ఓపీడీ" : "Routine OPD"}</span>
+              </div>
+            </div>
+
+            {/* Patient Card 4: Patient Support & SOS Services */}
+            <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{isTe ? "కేర్‌బ్రిడ్జ్ సేవలు" : "CareBridge Services"}</span>
+                </h4>
+                <span className="text-[10px] font-bold text-emerald-600">{isTe ? "24x7 అందుబాటులో" : "24x7 Active"}</span>
+              </div>
+              <div className="space-y-2 text-xs">
+                <div className="p-2 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-rose-900 text-xs">{isTe ? "108 అత్యవసర SOS" : "108 Emergency SOS"}</div>
+                    <div className="text-[10px] text-rose-600">{isTe ? "తక్షణ ట్రియాజ్ & అంబులెన్స్ కాల్" : "Instant triage & ambulance call"}</div>
+                  </div>
+                  <span className="text-xs">🚨</span>
+                </div>
+                <div className="p-2 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-blue-900 text-xs">{isTe ? "వాట్సాప్ అప్‌డేట్లు" : "WhatsApp Updates"}</div>
+                    <div className="text-[10px] text-blue-600">+91 98480 22334 {isTe ? "(యాక్టివ్)" : "(Active)"}</div>
+                  </div>
+                  <span className="text-xs">💬</span>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigateToTab('token_tracker')}
+                className="w-full mt-1 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition cursor-pointer"
+              >
+                {isTe ? "ఓపీడీ వెయిటింగ్ హాల్ టీవీ స్థితి →" : "OPD Waiting Hall TV Status →"}
+              </button>
+            </div>
+          </div>
+        )
       ) : role === 'receptionist' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Reception Card 1: Doctors in OPD */}
@@ -1002,7 +1414,7 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
             <div className="space-y-2 text-xs">
               <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
                 <div>
-                  <div className="font-bold text-slate-900">Dr. Anil Kumar</div>
+                  <div className="font-bold text-slate-900">Dr. Naveen Kumar</div>
                   <div className="text-[10px] text-slate-400">{isTe ? "కార్డియాలజీ • గది 102" : "Cardiology • Room 102"}</div>
                 </div>
                 <span className="font-mono text-xs font-bold text-blue-600">{isTe ? "సేవ అందిస్తున్నారు" : "Serving"} #C-21</span>
@@ -1230,6 +1642,14 @@ export const MedicalErpDashboard: React.FC<MedicalErpDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Export Patient Footfall (CSV / Excel) Modal */}
+      <ExportPatientVisitsModal
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        language={language}
+        doctorName={role === 'doctor' ? currentProfile.name : undefined}
+      />
     </div>
   );
 };

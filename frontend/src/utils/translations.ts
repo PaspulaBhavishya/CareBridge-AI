@@ -134,6 +134,7 @@ export interface TranslationDictionary {
   demo_switcher_label: string;
   demo_switcher_instruction: string;
   role_btn_patient_en: string;
+  role_btn_patient_mythri: string;
   role_btn_patient_te: string;
   role_btn_doctor: string;
   role_btn_receptionist: string;
@@ -172,6 +173,65 @@ export interface TranslationDictionary {
   today: string;
   tomorrow: string;
   call_token_alert: string;
+
+  // Staff Scheduler & Doctor Rosters
+  roster_hub_title: string;
+  roster_hub_subtitle: string;
+  btn_refresh_schedules: string;
+  tab_doctor_rosters: string;
+  tab_conflicts: string;
+  tab_appointments: string;
+  doctor_search_placeholder: string;
+  filter_all_doctors: string;
+  filter_cardiology: string;
+  filter_general_med: string;
+  filter_orthopedics: string;
+  filter_on_duty: string;
+  status_on_duty: string;
+  status_in_consultation: string;
+  status_backup_ready: string;
+  status_upcoming_shift: string;
+  status_on_leave: string;
+  serving_now_label: string;
+  waiting_count_label: string;
+  shift_label: string;
+  room_desk_label: string;
+  contact_ext_label: string;
+  crowd_alert_title: string;
+  crowd_surge_badge: string;
+  telemetry_node_label: string;
+  agent_recommendation_label: string;
+  crowd_recommendation_text: string;
+  current_queue_label: string;
+  projected_queue_label: string;
+  wait_reduction_label: string;
+  telemetry_updated_sync: string;
+  btn_hide_impact: string;
+  btn_view_impact: string;
+  btn_approve_recommendation: string;
+  recommendation_applied_badge: string;
+  conflicts_section_title: string;
+  action_required_badge: string;
+  all_conflicts_cleared: string;
+  no_conflicts_detected: string;
+  conflict_label: string;
+  pending_staff_approval: string;
+  issue_label: string;
+  ai_proposed_resolution: string;
+  btn_approve_apply: string;
+  resolved_label: string;
+  resolved_badge: string;
+  confirmed_appts_title: string;
+  appts_search_placeholder: string;
+  no_appts_found: string;
+  col_code: string;
+  col_patient: string;
+  col_doctor: string;
+  col_hospital: string;
+  col_datetime: string;
+  col_est_wait: string;
+  col_smartflow_score: string;
+  col_status: string;
 }
 
 export const translations: Record<SupportedLanguage, TranslationDictionary> = {
@@ -299,7 +359,7 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
     btn_generate_summary: "Generate Summary",
     btn_book_now: "Book Now",
     ai_sample_cardio: "Cardiologist Consultation",
-    ai_sample_cardio_sub: "Book slot with Dr. Anil Kumar",
+    ai_sample_cardio_sub: "Book slot with Dr. Naveen Kumar",
     ai_sample_telemetry: "Queue Telemetry",
     ai_sample_telemetry_sub: "Balance OPD load across rooms",
     ai_sample_summary: "AI Patient Summary",
@@ -309,6 +369,7 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
     demo_switcher_label: "Demo Role Switcher",
     demo_switcher_instruction: "Tap any button to test role-specific view:",
     role_btn_patient_en: "👤 Patient (EN)",
+    role_btn_patient_mythri: "👤 Mythri (New Patient Portal)",
     role_btn_patient_te: "👤 Telugu Patient",
     role_btn_doctor: "🩺 Doctor (OPD)",
     role_btn_receptionist: "💼 Receptionist",
@@ -346,7 +407,66 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
     normal_risk: "Normal",
     today: "Today",
     tomorrow: "Tomorrow",
-    call_token_alert: "Token called successfully"
+    call_token_alert: "Token called successfully",
+
+    // Staff Scheduler & Doctor Rosters
+    roster_hub_title: "Staff & Receptionist Coordination Hub • Doctor Rosters",
+    roster_hub_subtitle: "Live doctor duty roster, OPD room assignments, automated schedule conflict detection, and queue management.",
+    btn_refresh_schedules: "Refresh Schedules",
+    tab_doctor_rosters: "Doctor Duty Rosters",
+    tab_conflicts: "Schedule Conflicts",
+    tab_appointments: "Confirmed Appointments",
+    doctor_search_placeholder: "Search doctors by name, department, or room...",
+    filter_all_doctors: "All Doctors",
+    filter_cardiology: "Cardiology",
+    filter_general_med: "General Medicine",
+    filter_orthopedics: "Orthopedics",
+    filter_on_duty: "On Duty",
+    status_on_duty: "On Duty",
+    status_in_consultation: "In Consultation",
+    status_backup_ready: "Standby / Backup",
+    status_upcoming_shift: "Upcoming Shift",
+    status_on_leave: "On Leave",
+    serving_now_label: "Serving Token",
+    waiting_count_label: "Waiting",
+    shift_label: "Shift",
+    room_desk_label: "OPD Room",
+    contact_ext_label: "Intercom / Ext",
+    crowd_alert_title: "Operational Crowd Alert: Cardiology OPD Queue at 42",
+    crowd_surge_badge: "Critical Surge > 40",
+    telemetry_node_label: "Node: CareBridge Heart Center Guntur",
+    agent_recommendation_label: "Agent Recommendation:",
+    crowd_recommendation_text: "Activate auxiliary OPD Room 104 with Dr. Suresh (Cardiology backup) and reroute non-acute walk-ins to Hospital C.",
+    current_queue_label: "Current Queue",
+    projected_queue_label: "Projected Queue",
+    wait_reduction_label: "Wait Reduction",
+    telemetry_updated_sync: "Telemetry updated 1 min ago • SmartFlow Network Sync",
+    btn_hide_impact: "Hide Impact",
+    btn_view_impact: "View Network Impact",
+    btn_approve_recommendation: "Approve Recommendation",
+    recommendation_applied_badge: "Recommendation Applied (Room 104 Open)",
+    conflicts_section_title: "Automated Schedule Conflicts & Audits",
+    action_required_badge: "Action Required",
+    all_conflicts_cleared: "All Cleared",
+    no_conflicts_detected: "No schedule conflicts detected across any hospital node.",
+    conflict_label: "Conflict",
+    pending_staff_approval: "PENDING STAFF APPROVAL",
+    issue_label: "Issue:",
+    ai_proposed_resolution: "AI Proposed Resolution:",
+    btn_approve_apply: "Approve & Apply Resolution",
+    resolved_label: "Resolved:",
+    resolved_badge: "RESOLVED",
+    confirmed_appts_title: "Scheduled Patient Appointments",
+    appts_search_placeholder: "Search appointments by patient, code, doctor...",
+    no_appts_found: "No confirmed appointments found. Book one via CareBridge AI!",
+    col_code: "Code",
+    col_patient: "Patient",
+    col_doctor: "Doctor & Specialty",
+    col_hospital: "Hospital",
+    col_datetime: "Date & Time",
+    col_est_wait: "Est Wait",
+    col_smartflow_score: "SmartFlow Score",
+    col_status: "Status"
   },
 
   te: {
@@ -473,7 +593,7 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
     btn_generate_summary: "సారాంశం సృష్టించండి",
     btn_book_now: "ఇప్పుడే బుక్ చేయండి",
     ai_sample_cardio: "కార్డియాలజిస్ట్ సంప్రదింపు",
-    ai_sample_cardio_sub: "డాక్టర్ అనిల్ కుమార్‌తో స్లాట్ బుక్ చేయండి",
+    ai_sample_cardio_sub: "డాక్టర్ నవీన్ కుమార్‌తో స్లాట్ బుక్ చేయండి",
     ai_sample_telemetry: "క్యూ టెలిమెట్రీ",
     ai_sample_telemetry_sub: "గదుల మధ్య ఓపీడీ రద్దీని సమతుల్యం చేయండి",
     ai_sample_summary: "AI రోగి సారాంశం",
@@ -483,6 +603,7 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
     demo_switcher_label: "డెమో రోల్ స్విచ్చర్",
     demo_switcher_instruction: "ఏదైనా బటన్‌పై నొక్కి ఆ పాత్ర వీక్షణను చూడండి:",
     role_btn_patient_en: "👤 పేషెంట్ (EN)",
+    role_btn_patient_mythri: "👤 మైత్రి (కొత్త పేషెంట్ పోర్టల్)",
     role_btn_patient_te: "👤 తెలుగు పేషెంట్",
     role_btn_doctor: "🩺 డాక్టర్ (ఓపీడీ)",
     role_btn_receptionist: "💼 రిసెప్షనిస్ట్",
@@ -520,7 +641,66 @@ export const translations: Record<SupportedLanguage, TranslationDictionary> = {
     normal_risk: "సాధారణం",
     today: "ఈరోజు",
     tomorrow: "రేపు",
-    call_token_alert: "టోకెన్ విజయవంతంగా పిలవబడింది"
+    call_token_alert: "టోకెన్ విజయవంతంగా పిలవబడింది",
+
+    // Staff Scheduler & Doctor Rosters
+    roster_hub_title: "వైద్యుల డ్యూటీ రోస్టర్ & సిబ్బంది సమన్వయ కేంద్రం",
+    roster_hub_subtitle: "ప్రత్యక్ష వైద్యుల డ్యూటీ రోస్టర్, ఓపీడీ గదుల కేటాయింపు, షెడ్యూల్ వివాదాల గుర్తింపు మరియు క్యూ నిర్వహణ.",
+    btn_refresh_schedules: "షెడ్యూల్స్ రీఫ్రెష్ చేయండి",
+    tab_doctor_rosters: "వైద్యుల డ్యూటీ రోస్టర్",
+    tab_conflicts: "షెడ్యూల్ వివాదాలు",
+    tab_appointments: "ఖరారైన అపాయింట్‌మెంట్లు",
+    doctor_search_placeholder: "వైద్యుల పేరు, విభాగం లేదా గది నంబర్‌తో వెతకండి...",
+    filter_all_doctors: "అందరూ వైద్యులు",
+    filter_cardiology: "కార్డియాలజీ",
+    filter_general_med: "జనరల్ మెడిసిన్",
+    filter_orthopedics: "ఆర్థోపెడిక్స్",
+    filter_on_duty: "డ్యూటీలో ఉన్నారు",
+    status_on_duty: "డ్యూటీలో ఉన్నారు",
+    status_in_consultation: "సంప్రదింపులో ఉన్నారు",
+    status_backup_ready: "స్టాండ్‌బై సిద్ధం",
+    status_upcoming_shift: "తదుపరి షిఫ్ట్",
+    status_on_leave: "సెలవులో ఉన్నారు",
+    serving_now_label: "ప్రస్తుత టోకెన్",
+    waiting_count_label: "వేచి ఉన్న రోగులు",
+    shift_label: "షిఫ్ట్ సమయం",
+    room_desk_label: "ఓపీడీ గది",
+    contact_ext_label: "ఇంటర్‌కామ్ / ఫోన్",
+    crowd_alert_title: "ఆసుపత్రి రద్దీ హెచ్చరిక: కార్డియాలజీ ఓపీడీ క్యూలో 42 మంది రోగులు",
+    crowd_surge_badge: "తీవ్రమైన రద్దీ > 40",
+    telemetry_node_label: "కేంద్రం: కేర్‌బ్రిడ్జ్ హార్ట్ సెంటర్ గుంటూరు",
+    agent_recommendation_label: "AI ఏజెంట్ సిఫార్సు:",
+    crowd_recommendation_text: "డాక్టర్ సురేష్‌తో (కార్డియాలజీ బ్యాకప్) సహాయక ఓపీడీ గది 104ని ప్రారంభించండి మరియు అత్యవసరం కాని రోగులను హాస్పిటల్ Cకి మళ్లించండి.",
+    current_queue_label: "ప్రస్తుత క్యూ",
+    projected_queue_label: "అంచనా క్యూ",
+    wait_reduction_label: "వేచి ఉండే సమయం తగ్గుదల",
+    telemetry_updated_sync: "టెలిమెట్రీ 1 నిమిషం క్రితం అప్‌డేట్ చేయబడింది • స్మార్ట్‌ఫ్లో నెట్‌వర్క్ సింక్",
+    btn_hide_impact: "ప్రభావం దాచండి",
+    btn_view_impact: "నెట్‌వర్క్ ప్రభావం చూడండి",
+    btn_approve_recommendation: "సిఫార్సును ఆమోదించండి",
+    recommendation_applied_badge: "సిఫార్సు అమలు చేయబడింది (గది 104 తెరవబడింది)",
+    conflicts_section_title: "ఆటోమేటెడ్ షెడ్యూల్ వివాదాలు & ఆడిట్‌లు",
+    action_required_badge: "చర్య అవసరం",
+    all_conflicts_cleared: "అన్నీ పరిష్కరించబడ్డాయి",
+    no_conflicts_detected: "ఏ ఆసుపత్రి నోడ్‌లోనూ షెడ్యూల్ వివాదాలు కనుగొనబడలేదు.",
+    conflict_label: "వివాదం",
+    pending_staff_approval: "సిబ్బంది ఆమోదం కోసం వేచి ఉంది",
+    issue_label: "సమస్య:",
+    ai_proposed_resolution: "AI ప్రతిపాదించిన పరిష్కారం:",
+    btn_approve_apply: "పరిష్కారాన్ని ఆమోదించి అమలు చేయండి",
+    resolved_label: "పరిష్కరించబడింది:",
+    resolved_badge: "పరిష్కరించబడింది",
+    confirmed_appts_title: "షెడ్యూల్ చేయబడిన రోగుల అపాయింట్‌మెంట్లు",
+    appts_search_placeholder: "రోగి, కోడ్, వైద్యుల పేరుతో వెతకండి...",
+    no_appts_found: "ధృవీకరించబడిన అపాయింట్‌మెంట్లు ఏవీ లేవు. కేర్‌బ్రిడ్జ్ AI ద్వారా బుక్ చేయండి!",
+    col_code: "కోడ్",
+    col_patient: "రోగి పేరు",
+    col_doctor: "వైద్యులు & విభాగం",
+    col_hospital: "ఆసుపత్రి",
+    col_datetime: "తేదీ & సమయం",
+    col_est_wait: "అంచనా వేచింపు",
+    col_smartflow_score: "స్మార్ట్‌ఫ్లో స్కోర్",
+    col_status: "స్థితి"
   }
 };
 

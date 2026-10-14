@@ -41,6 +41,8 @@ interface RecommendedHospital {
   active_icu_units: number;
   available_beds: number;
   er_status: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 interface AlternativeHospital {
@@ -51,10 +53,13 @@ interface AlternativeHospital {
   distance_km: number;
   eta_minutes: number;
   emergency_phone: string;
+  map_link?: string;
   has_specialist: boolean;
   doctor_name: string;
   doctor_title: string;
   active_icu_units: number;
+  latitude?: number;
+  longitude?: number;
 }
 
 interface TriageResponse {
@@ -155,6 +160,105 @@ const EMERGENCY_CASES = [
   }
 ];
 
+interface HospitalDataRecord {
+  code: string;
+  name: string;
+  short_name: string;
+  area: string;
+  city: string;
+  lat: number;
+  lng: number;
+  emergency_phone: string;
+  contact_phone: string;
+  active_icu_units: number;
+  available_beds: number;
+  doctors: Record<string, {
+    name: string;
+    title: string;
+    specialization: string;
+    room_number: string;
+    rating: number;
+    experience_years: number;
+  }>;
+}
+
+const HYDERABAD_HOSPITALS: HospitalDataRecord[] = [
+  {
+    code: 'HOSP-B',
+    name: 'CareBridge Metro Health Center',
+    short_name: 'Metro Trauma Hub',
+    area: 'Financial District, Gachibowli',
+    city: 'Hyderabad',
+    lat: 17.4401,
+    lng: 78.3489,
+    emergency_phone: '+91 40 4567 9999',
+    contact_phone: '+91 40 4567 0000',
+    active_icu_units: 8,
+    available_beds: 24,
+    doctors: {
+      CHEST_PAIN: { name: 'Dr. Naveen Kumar', title: 'Senior Interventional Cardiologist', specialization: 'Cardiology', room_number: 'Cardio ER-1', rating: 4.9, experience_years: 16 },
+      ACCIDENT_TRAUMA: { name: 'Dr. K. Srinivas', title: 'Senior Orthopedic & Trauma Surgeon', specialization: 'Orthopedics & Trauma', room_number: 'Trauma Bay 2', rating: 4.8, experience_years: 14 },
+      BREATHING_SEVERE: { name: 'Dr. Priya', title: 'Critical Care & Pulmonology Lead', specialization: 'Critical Care', room_number: 'ICU-1', rating: 4.9, experience_years: 12 },
+      STROKE_NEURO: { name: 'Dr. Sunitha Reddy', title: 'Senior Stroke & Neuro Specialist', specialization: 'Neurology', room_number: 'Neuro Bay 3', rating: 4.9, experience_years: 15 },
+      MATERNITY: { name: 'Dr. Meera Nambiar', title: 'Obstetrician & Pediatric Lead', specialization: 'Obstetrics & Pediatrics', room_number: 'Labor Ward 1', rating: 4.8, experience_years: 11 }
+    }
+  },
+  {
+    code: 'HOSP-A',
+    name: 'Apex Super Speciality Hospital',
+    short_name: 'Apex Hospital Banjara',
+    area: 'Road No. 2, Banjara Hills',
+    city: 'Hyderabad',
+    lat: 17.4156,
+    lng: 78.4350,
+    emergency_phone: '+91 40 2345 6789',
+    contact_phone: '+91 40 2345 0000',
+    active_icu_units: 6,
+    available_beds: 18,
+    doctors: {
+      CHEST_PAIN: { name: 'Dr. K. S. Rao', title: 'Chief Cardiologist', specialization: 'Cardiology', room_number: 'Room 102', rating: 4.9, experience_years: 18 },
+      ACCIDENT_TRAUMA: { name: 'Dr. Pradeep Chandra', title: 'Senior Trauma Specialist', specialization: 'Orthopedics', room_number: 'Room 105', rating: 4.8, experience_years: 13 },
+      BREATHING_SEVERE: { name: 'Dr. Harika Varma', title: 'Critical Care Specialist', specialization: 'General Medicine', room_number: 'Room 108', rating: 4.7, experience_years: 10 },
+      STROKE_NEURO: { name: 'Dr. N. Sudhakar', title: 'Lead Neurologist', specialization: 'Neurology', room_number: 'Room 110', rating: 4.9, experience_years: 17 },
+      MATERNITY: { name: 'Dr. Harika Varma', title: 'Senior Medical Officer', specialization: 'Maternity', room_number: 'Room 112', rating: 4.7, experience_years: 10 }
+    }
+  },
+  {
+    code: 'HOSP-C',
+    name: 'City Community Healthcare',
+    short_name: 'City Care Secunderabad',
+    area: 'Clock Tower, Secunderabad',
+    city: 'Hyderabad',
+    lat: 17.4399,
+    lng: 78.4983,
+    emergency_phone: '+91 40 6789 1234',
+    contact_phone: '+91 40 6789 0000',
+    active_icu_units: 5,
+    available_beds: 15,
+    doctors: {
+      CHEST_PAIN: { name: 'Dr. Rajesh Gupta', title: 'Senior Cardiologist', specialization: 'Cardiology', room_number: 'Room 201', rating: 4.8, experience_years: 15 },
+      ACCIDENT_TRAUMA: { name: 'Dr. M. Ramesh', title: 'Orthopedic Consultant', specialization: 'Orthopedics', room_number: 'Room 203', rating: 4.7, experience_years: 12 },
+      BREATHING_SEVERE: { name: 'Dr. Bhavani Prasad', title: 'Emergency Physician', specialization: 'General Medicine', room_number: 'Room 205', rating: 4.8, experience_years: 11 },
+      STROKE_NEURO: { name: 'Dr. Arvind Swamy', title: 'Senior Neurologist', specialization: 'Neurology', room_number: 'Room 208', rating: 4.9, experience_years: 16 },
+      MATERNITY: { name: 'Dr. Bhavani Prasad', title: 'Emergency Duty Officer', specialization: 'Maternity', room_number: 'Room 210', rating: 4.8, experience_years: 11 }
+    }
+  }
+];
+
+function calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
+
 export const EmergencySOSModal: React.FC<EmergencySOSModalProps> = ({ 
   isOpen, 
   onClose, 
@@ -206,20 +310,58 @@ export const EmergencySOSModal: React.FC<EmergencySOSModalProps> = ({
           setCoords({ lat, lng });
           setDetectedAddress(`GPS: ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E (Live Device Location)`);
           setIsGpsLocating(false);
+          // If a case was already clicked while locating, re-run with exact coordinates
+          if (selectedCaseId && selectedCaseId !== 'NON_EMERGENCY') {
+            executeTriage(selectedCaseId, customDescription, lat, lng);
+          }
         },
         () => {
           // Default fallback to Hyderabad central hub
-          setCoords({ lat: 17.4401, lng: 78.3489 });
+          const fallback = { lat: 17.4401, lng: 78.3489 };
+          setCoords(fallback);
           setDetectedAddress('Gachibowli, Financial District, Hyderabad (Default Hub)');
           setIsGpsLocating(false);
         },
-        { timeout: 7000, enableHighAccuracy: true }
+        { timeout: 6000, enableHighAccuracy: true }
       );
     } else {
-      setCoords({ lat: 17.4401, lng: 78.3489 });
+      const fallback = { lat: 17.4401, lng: 78.3489 };
+      setCoords(fallback);
       setDetectedAddress('Gachibowli, Financial District, Hyderabad');
       setIsGpsLocating(false);
     }
+  };
+
+  const getDeviceCoordinates = (): Promise<{ lat: number; lng: number }> => {
+    return new Promise((resolve) => {
+      if (coords) {
+        resolve(coords);
+        return;
+      }
+      if ('geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const c = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            setCoords(c);
+            setDetectedAddress(`GPS: ${c.lat.toFixed(4)}°N, ${c.lng.toFixed(4)}°E (Live Device Location)`);
+            setIsGpsLocating(false);
+            resolve(c);
+          },
+          () => {
+            const fallback = { lat: 17.4401, lng: 78.3489 };
+            setCoords(fallback);
+            setDetectedAddress('Gachibowli, Financial District, Hyderabad (Default Hub)');
+            setIsGpsLocating(false);
+            resolve(fallback);
+          },
+          { timeout: 4000, enableHighAccuracy: true }
+        );
+      } else {
+        const fallback = { lat: 17.4401, lng: 78.3489 };
+        setCoords(fallback);
+        resolve(fallback);
+      }
+    });
   };
 
   const handleLocationHubChange = (hub: 'AUTO' | 'GACHIBOWLI' | 'BANJARA' | 'SECUNDERABAD') => {
@@ -261,6 +403,47 @@ export const EmergencySOSModal: React.FC<EmergencySOSModalProps> = ({
     return () => clearInterval(interval);
   }, [step, etaTimerSec]);
 
+  /**
+   * Generates Google Maps Directions URL:
+   * Origin: Device location (Source)
+   * Destination: Suggested hospital location (Destination)
+   * Mode: Driving
+   */
+  const getGoogleMapsDirectionsUrl = (hosp?: RecommendedHospital | AlternativeHospital) => {
+    // 1. Source location: Device GPS Coordinates
+    const sourceLat = coords?.lat ?? 17.4401;
+    const sourceLng = coords?.lng ?? 78.3489;
+    const originParam = `${sourceLat},${sourceLng}`;
+
+    // 2. Destination location: Hospital Coordinates
+    let destLat = 17.4401;
+    let destLng = 78.3489;
+
+    if (hosp) {
+      if (hosp.latitude && hosp.longitude) {
+        destLat = hosp.latitude;
+        destLng = hosp.longitude;
+      } else {
+        const hospCode = (hosp as any).code || (hosp as any).hospital_code;
+        if (hospCode === 'HOSP-A') {
+          destLat = 17.4156;
+          destLng = 78.4350;
+        } else if (hospCode === 'HOSP-B') {
+          destLat = 17.4401;
+          destLng = 78.3489;
+        } else if (hospCode === 'HOSP-C') {
+          destLat = 17.4399;
+          destLng = 78.4983;
+        }
+      }
+    }
+
+    const destinationParam = `${destLat},${destLng}`;
+
+    // Return Google Maps Universal Directions URL
+    return `https://www.google.com/maps/dir/?api=1&origin=${originParam}&destination=${destinationParam}&travelmode=driving`;
+  };
+
   if (!isOpen) return null;
 
   const executeTriage = async (caseId: string, desc: string, targetLat?: number, targetLng?: number) => {
@@ -299,21 +482,103 @@ export const EmergencySOSModal: React.FC<EmergencySOSModalProps> = ({
         }
       }
     } catch (err) {
-      console.error('Emergency triage error:', err);
-      // Fallback safe simulation
+      console.error('Emergency triage error / offline fallback:', err);
+      // Client-side fallback matching nearest hospital based on device location and selected case
+      const matchedCase = EMERGENCY_CASES.find(c => c.id === caseId);
+
+      // Dynamically calculate distance from device location to each hospital & sort
+      const hospitalsWithDistance = HYDERABAD_HOSPITALS.map((h) => {
+        const dist = calculateHaversineDistance(finalLat, finalLng, h.lat, h.lng);
+        const eta = Math.max(3, Math.round(dist * 2.2));
+        const doc = h.doctors[caseId] || h.doctors['CHEST_PAIN'];
+        return {
+          ...h,
+          distance_km: dist,
+          eta_minutes: eta,
+          doc
+        };
+      }).sort((a, b) => a.distance_km - b.distance_km);
+
+      const nearest = hospitalsWithDistance[0];
+      const alternatives = hospitalsWithDistance.slice(1);
+
+      const fallbackData: TriageResponse = {
+        is_genuine_emergency: true,
+        severity: 'CODE_RED_CRITICAL',
+        case_type: caseId,
+        case_category_en: matchedCase?.titleEn || 'Acute Emergency Medical Care',
+        case_category_te: matchedCase?.titleTe || 'తీవ్ర అత్యవసర పరిస్థితి (Emergency Care)',
+        required_specialty: nearest.doc.specialization,
+        patient_location: {
+          latitude: finalLat,
+          longitude: finalLng,
+          source: 'DEVICE_GPS'
+        },
+        recommended_hospital: {
+          code: nearest.code,
+          name: nearest.name,
+          short_name: nearest.short_name,
+          area: nearest.area,
+          city: nearest.city,
+          latitude: nearest.lat,
+          longitude: nearest.lng,
+          distance_km: nearest.distance_km,
+          eta_minutes: nearest.eta_minutes,
+          emergency_phone: nearest.emergency_phone,
+          contact_phone: nearest.contact_phone,
+          map_link: `https://www.google.com/maps/dir/?api=1&origin=${finalLat},{finalLng}&destination=${nearest.lat},${nearest.lng}&travelmode=driving`,
+          active_icu_units: nearest.active_icu_units,
+          available_beds: nearest.available_beds,
+          er_status: 'Level-1 24/7 Trauma Bay Active • Specialist On Standby'
+        },
+        specialist_doctor: {
+          name: nearest.doc.name,
+          title: nearest.doc.title,
+          specialization: nearest.doc.specialization,
+          room_number: nearest.doc.room_number,
+          rating: nearest.doc.rating,
+          experience_years: nearest.doc.experience_years,
+          duty_status: 'ON_DUTY_IN_ER'
+        },
+        alternative_hospitals: alternatives.map((alt) => ({
+          hospital_code: alt.code,
+          hospital_name: alt.name,
+          short_name: alt.short_name,
+          area: alt.area,
+          latitude: alt.lat,
+          longitude: alt.lng,
+          distance_km: alt.distance_km,
+          eta_minutes: alt.eta_minutes,
+          emergency_phone: alt.emergency_phone,
+          has_specialist: true,
+          doctor_name: alt.doc.name,
+          doctor_title: alt.doc.title,
+          active_icu_units: alt.active_icu_units,
+          map_link: `https://www.google.com/maps/dir/?api=1&origin=${finalLat},${finalLng}&destination=${alt.lat},${alt.lng}&travelmode=driving`
+        })),
+        first_aid_te: [
+          'రోగిని నిశ్శబ్దంగా, విశ్రాంతిగా కూర్చోబెట్టండి. ఎటువంటి శారీరక శ్రమ చేయనివ్వవద్దు.',
+          'రోగి బిగుతైన బట్టలను వదులు చేయండి. తాజా గాలి అందేలా చూడండి.',
+          'శ్వాస మరియు నాడిని నిరంతరం పర్యవేక్షించండి.'
+        ]
+      };
+      setTriageData(fallbackData);
+      setEtaTimerSec(nearest.eta_minutes * 60);
       setStep('EMERGENCY_ACTIVE');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSelectCase = (caseId: string) => {
+  const handleSelectCase = async (caseId: string) => {
     setSelectedCaseId(caseId);
     if (caseId === 'NON_EMERGENCY') {
       setStep('NON_EMERGENCY');
       return;
     }
-    executeTriage(caseId, customDescription);
+    // Automatically detect device location and immediately select nearest hospital for this reason
+    const deviceLoc = await getDeviceCoordinates();
+    executeTriage(caseId, customDescription, deviceLoc.lat, deviceLoc.lng);
   };
 
   const handleCustomSubmit = (e: React.FormEvent) => {
@@ -608,6 +873,16 @@ export const EmergencySOSModal: React.FC<EmergencySOSModalProps> = ({
                   <span>సాధారణ అపాయింట్‌మెంట్ బుక్ చేసుకోండి (Book Doctor)</span>
                 </button>
 
+                <a
+                  href={getGoogleMapsDirectionsUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-3 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-extrabold text-xs flex items-center gap-2 shadow-lg shadow-cyan-600/30 transition active:scale-95 text-center cursor-pointer"
+                >
+                  <Navigation className="h-4 w-4" />
+                  <span>Directions (హాస్పిటల్ రూట్ మ్యాప్)</span>
+                </a>
+
                 <button
                   onClick={() => setStep('SELECT_CASE')}
                   className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center gap-1.5 border border-slate-700 transition cursor-pointer"
@@ -660,49 +935,76 @@ export const EmergencySOSModal: React.FC<EmergencySOSModalProps> = ({
 
               {/* RECOMMENDED HOSPITAL CARD (MATCHED BY LOCATION & SPECIALIST) */}
               {triageData.recommended_hospital && (
-                <div className="p-4 rounded-3xl bg-gradient-to-br from-slate-900 to-slate-950 border-2 border-emerald-500/70 shadow-2xl space-y-3 relative overflow-hidden">
+                <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border-2 border-emerald-500/70 shadow-2xl space-y-3.5 relative overflow-hidden">
                   
-                  {/* Badge */}
+                  {/* Top Badge & Distance */}
                   <div className="flex items-center justify-between">
                     <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
                       <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
-                      <span>అత్యంత సమీప సిఫార్సు ఆసుపత్రి (Recommended Nearest Hospital)</span>
+                      <span>మీ లొకేషన్‌కు అత్యంత సమీప ఆసుపత్రి (Nearest Recommended Hospital)</span>
                     </span>
-                    <span className="text-[11px] font-mono font-bold text-cyan-300">
-                      దూరం: {triageData.recommended_hospital.distance_km} km
+                    <span className="text-[11px] font-mono font-bold text-cyan-300 bg-cyan-950/60 px-2.5 py-0.5 rounded-lg border border-cyan-800">
+                      {triageData.recommended_hospital.distance_km} km • ~{triageData.recommended_hospital.eta_minutes} mins
                     </span>
                   </div>
 
-                  {/* Hospital Details */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="font-black text-base text-white flex items-center gap-2">
-                        <Building2 className="h-5 w-5 text-rose-400" />
-                        <span>{triageData.recommended_hospital.name}</span>
-                      </h3>
-                      <p className="text-xs text-slate-300 mt-0.5">
-                        📍 {triageData.recommended_hospital.area}, {triageData.recommended_hospital.city}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-3 mt-1.5 text-[11px]">
-                        <span className="text-emerald-400 font-bold flex items-center gap-1">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          <span>{triageData.recommended_hospital.active_icu_units} ICU యూనిట్లు సిద్ధంగా ఉన్నాయి</span>
+                  {/* Hospital Name & Location */}
+                  <div className="space-y-1">
+                    <h3 className="font-black text-base sm:text-lg text-white flex items-center gap-2">
+                      <Building2 className="h-5 w-5 text-rose-400 flex-shrink-0" />
+                      <span>{triageData.recommended_hospital.name}</span>
+                    </h3>
+                    <p className="text-xs text-slate-300 flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5 text-cyan-400 flex-shrink-0" />
+                      <span>{triageData.recommended_hospital.area}, {triageData.recommended_hospital.city}</span>
+                    </p>
+                  </div>
+
+                  {/* DIRECTIONS BUTTON DIRECTLY UNDER HOSPITAL NAME */}
+                  <div className="pt-0.5">
+                    <a
+                      href={getGoogleMapsDirectionsUrl(triageData.recommended_hospital)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xl shadow-cyan-600/40 hover:shadow-cyan-500/60 transition-all duration-200 active:scale-[0.98] border border-cyan-300/40 cursor-pointer text-center"
+                    >
+                      <Navigation className="h-4 w-4 fill-white flex-shrink-0" />
+                      <span>Directions (గూగుల్ మ్యాప్స్ లో రూట్ & నావిగేషన్)</span>
+                      <ArrowRight className="h-4 w-4 ml-1 flex-shrink-0" />
+                    </a>
+                  </div>
+
+                  {/* PATH OVERVIEW: SOURCE (DEVICE) -> DESTINATION (HOSPITAL) */}
+                  <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800/80 text-[11px] space-y-2">
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                      <span>Google Maps నావిగేషన్ రూట్ (Live Path):</span>
+                      <span className="text-emerald-400 font-mono">🚗 లైవ్ డ్రైవింగ్ నావిగేషన్</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                      <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] font-bold text-cyan-300 block">Source (మీ డివైస్ లొకేషన్):</span>
+                        <span className="font-semibold text-white block mt-0.5 truncate">
+                          📍 {detectedAddress.split('(')[0].trim()}
                         </span>
-                        <span className="text-slate-400">
-                          • {triageData.recommended_hospital.available_beds} సాధారణ బెడ్లు అందుబాటులో ఉన్నాయి
+                      </div>
+                      <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] font-bold text-rose-300 block">Destination (సిఫార్సు ఆసుపత్రి):</span>
+                        <span className="font-bold text-emerald-300 block mt-0.5 truncate">
+                          🏥 {triageData.recommended_hospital.short_name || triageData.recommended_hospital.name}
                         </span>
                       </div>
                     </div>
+                  </div>
 
-                    <a
-                      href={triageData.recommended_hospital.map_link}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-[11px] font-bold flex items-center gap-1.5 flex-shrink-0 shadow-md transition active:scale-95"
-                    >
-                      <Navigation className="h-3.5 w-3.5" />
-                      <span>గూగుల్ మ్యాప్స్</span>
-                    </a>
+                  {/* ICU & Available Beds */}
+                  <div className="flex flex-wrap items-center gap-3 pt-0.5 text-[11px]">
+                    <span className="text-emerald-400 font-bold flex items-center gap-1">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span>{triageData.recommended_hospital.active_icu_units} ICU యూనిట్లు సిద్ధంగా ఉన్నాయి</span>
+                    </span>
+                    <span className="text-slate-400">
+                      • {triageData.recommended_hospital.available_beds} సాధారణ బెడ్లు అందుబాటులో ఉన్నాయి
+                    </span>
                   </div>
 
                   {/* SPECIALIST DOCTOR ON DUTY CARD */}
@@ -736,31 +1038,42 @@ export const EmergencySOSModal: React.FC<EmergencySOSModalProps> = ({
                     </div>
                   )}
 
-                  {/* ACTION BUTTONS */}
-                  <div className="pt-1 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {/* Call 108 */}
+                  {/* ACTION BUTTONS (DIRECTIONS, 108, ER CALL, PRE-ALERT) */}
+                  <div className="pt-1 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {/* Option 1: Directions to Open Google Maps */}
                     <a
-                      href="tel:108"
-                      className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-600/40 transition active:scale-95 text-center"
+                      href={getGoogleMapsDirectionsUrl(triageData.recommended_hospital)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-cyan-600/40 transition active:scale-95 text-center cursor-pointer"
                     >
-                      <PhoneCall className="h-4 w-4" />
-                      <span>108 కాల్ చేయండి</span>
+                      <Navigation className="h-4 w-4 flex-shrink-0" />
+                      <span>Directions (రూట్)</span>
                     </a>
 
-                    {/* Hospital ER Desk Direct Call */}
+                    {/* Option 2: Call 108 */}
+                    <a
+                      href="tel:108"
+                      className="px-3 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-600/40 transition active:scale-95 text-center"
+                    >
+                      <PhoneCall className="h-4 w-4 flex-shrink-0" />
+                      <span>108 కాల్</span>
+                    </a>
+
+                    {/* Option 3: Hospital ER Desk Direct Call */}
                     <a
                       href={`tel:${triageData.recommended_hospital.emergency_phone}`}
-                      className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition active:scale-95 text-center"
+                      className="px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition active:scale-95 text-center"
                     >
-                      <PhoneCall className="h-4 w-4 text-cyan-400" />
+                      <PhoneCall className="h-4 w-4 text-cyan-400 flex-shrink-0" />
                       <span>ఆసుపత్రి ER కాల్</span>
                     </a>
 
-                    {/* Pre-Alert ER Team */}
+                    {/* Option 4: Pre-Alert ER Team */}
                     <button
                       onClick={handleSendPreAlertToER}
                       disabled={preAlertLoading || preAlertSent}
-                      className={`px-4 py-2.5 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer text-center ${
+                      className={`px-3 py-2.5 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer text-center ${
                         preAlertSent 
                           ? 'bg-emerald-700 text-white border border-emerald-500' 
                           : 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/30'
@@ -771,12 +1084,12 @@ export const EmergencySOSModal: React.FC<EmergencySOSModalProps> = ({
                       ) : preAlertSent ? (
                         <>
                           <CheckCircle2 className="h-4 w-4 text-emerald-200" />
-                          <span>ER కు సమాచారం అందింది</span>
+                          <span>ER కు అందింది</span>
                         </>
                       ) : (
                         <>
                           <Send className="h-4 w-4" />
-                          <span>ER కు ముందస్తు సమాచారం</span>
+                          <span>ER కు ముందస్తు</span>
                         </>
                       )}
                     </button>
@@ -802,20 +1115,36 @@ export const EmergencySOSModal: React.FC<EmergencySOSModalProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {triageData.alternative_hospitals.map((alt) => (
-                      <div key={alt.hospital_code} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-[11px]">
-                        <div>
-                          <h5 className="font-bold text-white">{alt.hospital_name}</h5>
-                          <span className="text-slate-400 text-[10px] block">{alt.area}</span>
-                          <span className="text-emerald-400 font-semibold text-[10px]">డాక్టర్: {alt.doctor_name}</span>
+                      <div key={alt.hospital_code} className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col justify-between gap-2 text-[11px]">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h5 className="font-bold text-white text-xs">{alt.hospital_name}</h5>
+                            <span className="text-slate-400 text-[10px] block">{alt.area}</span>
+                            <span className="text-emerald-400 font-semibold text-[10px]">డాక్టర్: {alt.doctor_name}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-bold text-cyan-300 font-mono text-xs block">{alt.distance_km} km</span>
+                            <span className="text-[10px] text-slate-400 block">~{alt.eta_minutes} mins</span>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <span className="font-bold text-cyan-300 font-mono text-xs block">{alt.distance_km} km</span>
-                          <span className="text-[10px] text-slate-400 block">~{alt.eta_minutes} mins</span>
+
+                        {/* Under Alternative Hospital Name: Directions and ER Call */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <a
+                            href={getGoogleMapsDirectionsUrl(alt)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 py-1.5 px-3 rounded-lg bg-cyan-600/30 hover:bg-cyan-600 text-cyan-200 hover:text-white border border-cyan-500/50 text-[11px] font-bold flex items-center justify-center gap-1.5 transition active:scale-95"
+                          >
+                            <Navigation className="h-3 w-3 fill-current" />
+                            <span>Directions (రూట్)</span>
+                          </a>
                           <a
                             href={`tel:${alt.emergency_phone}`}
-                            className="inline-block mt-0.5 text-[10px] text-rose-400 font-bold hover:underline"
+                            className="py-1.5 px-3 rounded-lg bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/40 text-[11px] font-bold flex items-center gap-1 transition"
                           >
-                            📞 ER కాల్
+                            <PhoneCall className="h-3 w-3" />
+                            <span>ER కాల్</span>
                           </a>
                         </div>
                       </div>

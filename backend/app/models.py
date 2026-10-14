@@ -256,3 +256,15 @@ class KnowledgeDocument(Base):
     keywords = Column(String(255), default="")
     simulation_mode = Column(Boolean, default=True)
 
+class DoctorPatientMessage(Base):
+    __tablename__ = "doctor_patient_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    doctor_name = Column(String(100), nullable=False)
+    patient_name = Column(String(100), nullable=False)
+    sender_role = Column(String(30), nullable=False) # "doctor" or "patient"
+    sender_name = Column(String(100), nullable=False)
+    message = Column(Text, nullable=False)
+    appointment_id = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+

@@ -5,7 +5,7 @@ from .models import (
     Hospital, Department, Doctor, ScheduleSlot, Appointment,
     Patient, ScheduleConflict, HospitalPolicy, AuditLog,
     QueueToken, HospitalResource, AgentSession, AgentToolCall,
-    ApprovalRequest, KnowledgeDocument
+    ApprovalRequest, KnowledgeDocument, DoctorPatientMessage
 )
 
 def init_db(db: Session):
@@ -180,7 +180,7 @@ def init_db(db: Session):
         Doctor(
             hospital_id=hosp_b.id,
             department_id=dept_cardio.id,
-            name="Dr. Anil Kumar",
+            name="Dr. Naveen Kumar",
             title="Senior Interventional Cardiologist",
             specialization="Cardiology",
             experience_years=15,
@@ -373,9 +373,15 @@ def init_db(db: Session):
     doc_gupta = next(d for d in docs if d.name == "Dr. Rajesh Gupta")
     doc_vikram = next(d for d in docs if d.name == "Dr. Vikram Verma")
     doc_harika = next(d for d in docs if d.name == "Dr. Harika Varma")
+    doc_naveen = next(d for d in docs if d.name == "Dr. Naveen Kumar")
 
     # 4. Seed Schedule Slots
     slots = []
+
+    # Dr. Naveen Kumar (Hospital B Cardiology - Senior Interventional Cardiologist)
+    slot_naveen_1 = ScheduleSlot(doctor_id=doc_naveen.id, date=today_str, start_time="11:00 AM", end_time="11:30 AM", is_booked=True, simulated_wait_min=10, token_number="CR-012", current_serving_token="CR-010")
+    slot_naveen_2 = ScheduleSlot(doctor_id=doc_naveen.id, date=tomorrow_str, start_time="10:30 AM", end_time="11:00 AM", is_booked=True, simulated_wait_min=12, token_number="CR-014", current_serving_token="CR-010")
+    slots.extend([slot_naveen_1, slot_naveen_2])
 
     # Dr. Priya (Hospital B General Medicine - Winner for prompt scenario!)
     # Available: 10:30 AM, 11:15 AM
@@ -481,11 +487,11 @@ def init_db(db: Session):
         role="admin",
         authorized_for_records=True
     )
-    doctor_anil = Patient(
+    doctor_naveen = Patient(
         patient_uid="DOC-2041",
-        name="Dr. Anil Kumar",
+        name="Dr. Naveen Kumar",
         phone="+91 98480 22334",
-        email="dr.anil@carebridge.org",
+        email="dr.naveen@carebridge.org",
         age=45,
         gender="Male",
         preferred_hospital_id=hosp_b.id,
@@ -505,7 +511,20 @@ def init_db(db: Session):
         role="patient",
         authorized_for_records=False
     )
-    db.add_all([patient_bhavishya, patient_sunitha, staff_priya, admin_varma, doctor_anil, patient_ravi])
+    patient_mythri = Patient(
+        id=9,
+        patient_uid="PAT-D7F2",
+        name="Mythri",
+        phone="+91 83093 58353",
+        email="mythri@gmail.com",
+        age=35,
+        gender="Female",
+        preferred_hospital_id=hosp_b.id,
+        language_pref="English",
+        role="patient",
+        authorized_for_records=False
+    )
+    db.add_all([patient_bhavishya, patient_sunitha, staff_priya, admin_varma, doctor_naveen, patient_ravi, patient_mythri])
     db.commit()
 
     # 6. Seed Existing Appointments & Conflict Demo Setup
@@ -561,6 +580,78 @@ def init_db(db: Session):
         smartflow_score=0.84
     )
     db.add(app1)
+
+    # Seed appointments for Dr. Naveen Kumar (Cardiology)
+    app_sunitha_naveen = Appointment(
+        confirmation_code="CB-2026-CR012",
+        patient_id=patient_sunitha.id,
+        doctor_id=doc_naveen.id,
+        slot_id=slot_naveen_1.id,
+        status="CONFIRMED",
+        reason="Cardiology Review & Hypertension Management (తీవ్ర రక్తపోటు మరియు గుండె పరీక్ష)",
+        priority="NORMAL",
+        simulated_wait_min=10,
+        smartflow_score=0.94,
+        token_number="CR-012",
+        consultation_fee=500,
+        prescription_json='{"medicines": [{"name": "Tab Telmisartan 40mg", "dosage": "Once daily morning after food (ఉదయం పరగడుపున)", "frequency": "30 days"}, {"name": "Tab Atorvastatin 10mg", "dosage": "Once daily at bedtime", "frequency": "30 days"}]}',
+        clinical_soap_notes="Hypertension stage 1 with mild tachycardia. Regular monitoring advised."
+    )
+    app_bhavishya_naveen = Appointment(
+        confirmation_code="CB-2026-CR014",
+        patient_id=patient_bhavishya.id,
+        doctor_id=doc_naveen.id,
+        slot_id=slot_naveen_2.id,
+        status="CONFIRMED",
+        reason="Preventive Cardiology & Routine ECG Review (కార్డియాలజీ చెకప్)",
+        priority="NORMAL",
+        simulated_wait_min=12,
+        smartflow_score=0.91,
+        token_number="CR-014",
+        consultation_fee=500,
+        prescription_json='{"medicines": [{"name": "Tab Metoprolol 25mg", "dosage": "Once daily morning after food", "frequency": "15 days"}]}',
+        clinical_soap_notes="Resting heart rate 78 bpm. Normal sinus rhythm on resting ECG."
+    )
+    db.add_all([app_sunitha_naveen, app_bhavishya_naveen])
+    db.commit()
+
+    # Seed verified direct messages between Dr. Naveen Kumar and consulted patients
+    msg_sunitha_1 = DoctorPatientMessage(
+        doctor_name="Dr. Naveen Kumar",
+        patient_name="Sunitha Reddy",
+        sender_role="patient",
+        sender_name="Sunitha Reddy",
+        message="నమస్కారం డాక్టర్ నవీన్ కుమార్ గారు, నిన్నటి నుండి కొద్దిగా గుండె దడగా ఉంది, Telmisartan టాబ్లెట్ వేసుకోవచ్చా?",
+        appointment_id=app_sunitha_naveen.id
+    )
+    msg_sunitha_2 = DoctorPatientMessage(
+        doctor_name="Dr. Naveen Kumar",
+        patient_name="Sunitha Reddy",
+        sender_role="doctor",
+        sender_name="Dr. Naveen Kumar",
+        message="నమస్కారం సునీత గారు, అవును Telmisartan 40mg ఉదయం టిఫిన్ తర్వాత తీసుకోండి. ఉప్పు తక్కువగా వాడండి మరియు రోజువారీ బీపీ రీడింగ్స్ నోట్ చేయండి.",
+        appointment_id=app_sunitha_naveen.id
+    )
+    msg_bhavishya_1 = DoctorPatientMessage(
+        doctor_name="Dr. Naveen Kumar",
+        patient_name="Bhavishya",
+        sender_role="doctor",
+        sender_name="Dr. Naveen Kumar",
+        message="Hello Bhavishya, I have reviewed your ECG report. Your cardiac rhythm is optimal and stable. Please continue 30 minutes daily walking and stay well-hydrated.",
+        appointment_id=app_bhavishya_naveen.id
+    )
+    msg_bhavishya_2 = DoctorPatientMessage(
+        doctor_name="Dr. Naveen Kumar",
+        patient_name="Bhavishya",
+        sender_role="patient",
+        sender_name="Bhavishya",
+        message="Thank you Dr. Naveen Kumar, I will follow your advice and monitor my vitals regularly.",
+        appointment_id=app_bhavishya_naveen.id
+    )
+    db.add_all([msg_sunitha_1, msg_sunitha_2, msg_bhavishya_1, msg_bhavishya_2])
+
+    # Note: Mythri (PAT-D7F2) is reserved as a pristine New Patient Portal demo
+    # (No pre-seeded appointments, tokens, or messages so judges can see clean state & test first booking)
 
     # Conflict Record for Staff Demo
     conflict = ScheduleConflict(

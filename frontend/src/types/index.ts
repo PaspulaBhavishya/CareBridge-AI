@@ -1,4 +1,4 @@
-export type UserRole = 'patient' | 'patient_telugu' | 'receptionist' | 'admin' | 'doctor';
+export type UserRole = 'patient' | 'patient_mythri' | 'patient_telugu' | 'receptionist' | 'admin' | 'doctor';
 
 export interface UserProfile {
   id: number;
@@ -20,6 +20,7 @@ export interface UserProfile {
   room_number?: string;
   experience_years?: number;
   consultation_fee?: number;
+  is_new?: boolean;
 }
 
 export interface DepartmentItem {
@@ -346,9 +347,11 @@ export interface AppointmentRecord {
   id: number;
   confirmation_code: string;
   patient_name: string;
+  patient_id?: number;
   doctor_name: string;
   department: string;
   hospital: string;
+  room_number?: string;
   date: string;
   time: string;
   token_number?: number | string;
@@ -506,3 +509,15 @@ export interface CancelRequest {
   actor_name: string;
   actor_role: string;
 }
+
+export interface DoctorPatientMessage {
+  id: number;
+  doctor_name: string;
+  patient_name: string;
+  sender_role: 'doctor' | 'patient';
+  sender_name: string;
+  message: string;
+  appointment_id?: number;
+  created_at: string;
+}
+
